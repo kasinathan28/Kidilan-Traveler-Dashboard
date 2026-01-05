@@ -33,7 +33,6 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
   
   const fetchAndSetProducts = useCallback(async () => {
     const filtersChanged = 
-      prevFiltersRef.current.search !== debouncedSearchQuery ||
       prevFiltersRef.current.sort.key !== sortConfig.key ||
       prevFiltersRef.current.sort.direction !== sortConfig.direction;
 
@@ -50,7 +49,6 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
         getProducts({
           page: pageToFetch,
           limit: PRODUCTS_PER_PAGE,
-          search: debouncedSearchQuery,
           sortBy: sortConfig.key,
           sortOrder: sortConfig.direction,
         }),
@@ -60,10 +58,13 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
       setCategories(categoriesData);
       const categoryMap = new Map(categoriesData.map(c => [c._id, c.name]));
       
-      const productsWithCategoryNames = productsData.products.map(p => ({
-        ...p,
-        category: categoryMap.get(p.category) || 'Uncategorized'
-      }));
+      const productsWithCategoryNames = productsData.products.map(p => {
+        const catId = p.categoryId || p.category;
+        return {
+          ...p,
+          category: (catId && categoryMap.get(catId)) || 'Uncategorized'
+        };
+      });
 
       setProducts(productsWithCategoryNames);
       setTotalProducts(productsData.totalCount);
@@ -73,8 +74,8 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     } finally {
       setIsLoading(false);
     }
-    prevFiltersRef.current = { search: debouncedSearchQuery, sort: sortConfig };
-  }, [currentPage, debouncedSearchQuery, sortConfig, showToast]);
+    prevFiltersRef.current = { search: '', sort: sortConfig };
+  }, [currentPage, sortConfig, showToast]);
 
   useEffect(() => {
     fetchAndSetProducts();
@@ -157,10 +158,15 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     if (error) {
       return <tr><td colSpan={7} className="text-center py-16 text-red-500">{error}</td></tr>;
     }
-    if (products.length === 0) {
+    const filteredProducts = products.filter(product => 
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      String(product.category).toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (filteredProducts.length === 0) {
       return <tr><td colSpan={7} className="text-center py-16 text-gray-500">No products found.</td></tr>;
     }
-    return products.map((product) => (
+    return filteredProducts.map((product) => (
       <tr key={product._id} className="bg-white border-b hover:bg-gray-50">
         <td data-label="Image" className="px-6 py-4">
           {product.imageUrls && product.imageUrls.length > 0 ? (

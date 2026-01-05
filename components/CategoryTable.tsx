@@ -7,7 +7,7 @@ import { AppContext } from '../contexts/AppContext';
 import ConfirmationModal from './ConfirmationModal';
 import CategoryModal from './CategoryModal';
 
-const CategoryTable: React.FC = () => {
+const CategoryTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -99,9 +99,18 @@ const CategoryTable: React.FC = () => {
             return <div className="text-center py-16 text-gray-500">No categories found. Start by adding one!</div>;
         }
 
+        const filteredCategories = categories.filter(category => 
+            category.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            category.description.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+
+        if (filteredCategories.length === 0) {
+            return <div className="text-center py-16 text-gray-500">No categories found matching "{searchQuery}".</div>;
+        }
+
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {categories.map(category => (
+                {filteredCategories.map(category => (
                     <div key={category._id} className="bg-white rounded-xl shadow-md overflow-hidden group flex flex-col">
                         <img src={category.imageUrl} alt={category.name} className="w-full h-40 object-cover"/>
                         <div className="p-5 flex-grow flex flex-col">

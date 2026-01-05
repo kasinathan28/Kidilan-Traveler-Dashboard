@@ -10,6 +10,7 @@ type Tab = 'hero' | 'gallery' | 'featured';
 
 const WebsiteContentPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<Tab>('hero');
+    const { searchQuery } = useContext(AppContext);
 
     const TabButton: React.FC<{tabName: Tab, label: string}> = ({ tabName, label }) => (
         <button
@@ -33,7 +34,7 @@ const WebsiteContentPage: React.FC = () => {
             </div>
 
             <div>
-                <PortfolioManager section={activeTab} />
+                <PortfolioManager section={activeTab} searchQuery={searchQuery} />
             </div>
         </div>
     );
@@ -41,9 +42,10 @@ const WebsiteContentPage: React.FC = () => {
 
 interface PortfolioManagerProps {
     section: Tab;
+    searchQuery: string;
 }
 
-const PortfolioManager: React.FC<PortfolioManagerProps> = ({ section }) => {
+const PortfolioManager: React.FC<PortfolioManagerProps> = ({ section, searchQuery }) => {
     const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -137,7 +139,10 @@ const PortfolioManager: React.FC<PortfolioManagerProps> = ({ section }) => {
             </div>
             {portfolioItems.length > 0 ? (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {portfolioItems.map(item => (
+                    {portfolioItems.filter(item => 
+                        item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                        item.description.toLowerCase().includes(searchQuery.toLowerCase())
+                    ).map(item => (
                         <div key={item._id} className="bg-gray-50 rounded-lg shadow-sm overflow-hidden group relative">
                              <div className="absolute top-2 right-2 z-10 flex space-x-2">
                                 <button 

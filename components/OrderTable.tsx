@@ -50,7 +50,6 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
         const data = await getOrders({
           page: pageToFetch,
           limit: ORDERS_PER_PAGE,
-          search: debouncedSearchQuery,
           sortBy: sortConfig.key,
           sortOrder: sortConfig.direction,
         });
@@ -62,11 +61,10 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
       } finally {
         setIsLoading(false);
       }
-  }, [debouncedSearchQuery, sortConfig, showToast]);
+  }, [sortConfig, showToast]);
 
   useEffect(() => {
     const filtersChanged = 
-      prevFiltersRef.current.search !== debouncedSearchQuery ||
       prevFiltersRef.current.sort.key !== sortConfig.key ||
       prevFiltersRef.current.sort.direction !== sortConfig.direction;
 
@@ -76,8 +74,8 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     }
     
     fetchAndSetOrders(pageToFetch);
-    prevFiltersRef.current = { search: debouncedSearchQuery, sort: sortConfig };
-  }, [currentPage, debouncedSearchQuery, sortConfig, fetchAndSetOrders]);
+    prevFiltersRef.current = { search: '', sort: sortConfig };
+  }, [currentPage, sortConfig, fetchAndSetOrders]);
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     if (newStatus === 'shipped') {
@@ -155,10 +153,16 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     if (error) {
       return <tr><td colSpan={6} className="text-center py-16 text-red-500">{error}</td></tr>;
     }
-    if (orders.length === 0) {
+    const filteredOrders = orders.filter(order => 
+      order._id.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      order.shippingAddress.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (order.shippingAddress.email && order.shippingAddress.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+
+    if (filteredOrders.length === 0) {
       return <tr><td colSpan={6} className="text-center py-16 text-gray-500">No orders found.</td></tr>;
     }
-    return orders.map((order) => (
+    return filteredOrders.map((order) => (
       <React.Fragment key={order._id}>
         <tr className="bg-white border-b hover:bg-gray-50">
           <td data-label="Order ID" className="px-6 py-4">
