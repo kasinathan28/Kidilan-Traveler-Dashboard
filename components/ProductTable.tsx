@@ -17,11 +17,11 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-  
+
   const [totalProducts, setTotalProducts] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<SortConfig<Product>>({ key: '_id', direction: 'descending' });
@@ -30,9 +30,9 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
   const prevFiltersRef = useRef({ search: debouncedSearchQuery, sort: sortConfig });
-  
+
   const fetchAndSetProducts = useCallback(async () => {
-    const filtersChanged = 
+    const filtersChanged =
       prevFiltersRef.current.sort.key !== sortConfig.key ||
       prevFiltersRef.current.sort.direction !== sortConfig.direction;
 
@@ -57,7 +57,7 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
 
       setCategories(categoriesData);
       const categoryMap = new Map(categoriesData.map(c => [c._id, c.name]));
-      
+
       const productsWithCategoryNames = productsData.products.map(p => {
         const catId = p.categoryId || p.category;
         return {
@@ -101,42 +101,48 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     setEditingProduct(product);
     setIsModalOpen(true);
   };
-  
+
   const handleDelete = async () => {
     if (!productToDelete) return;
 
     try {
-        await deleteProduct(productToDelete._id);
-        showToast("Product deleted successfully.");
-        if (products.length === 1 && currentPage > 1) {
-            setCurrentPage(currentPage - 1);
-        } else {
-             fetchAndSetProducts();
-        }
+      await deleteProduct(productToDelete._id);
+      showToast("Product deleted successfully.");
+      if (products.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      } else {
+        fetchAndSetProducts();
+      }
     } catch (error) {
-        showToast("Failed to delete product. Please try again.");
+      showToast("Failed to delete product. Please try again.");
     } finally {
-        setProductToDelete(null); 
+      setProductToDelete(null);
     }
   };
 
   const handleSave = async (productData: Omit<Product, '_id'> | Product) => {
     try {
-        if ('_id' in productData && productData._id) {
-            await updateProduct(productData._id, productData as Product);
-            showToast("Product updated successfully.");
-        } else {
-            await addProduct(productData);
-            showToast("Product added successfully.");
-        }
-        handleCloseModal();
-        fetchAndSetProducts();
-    } catch (error) {
-        showToast("Failed to save product.");
-        throw error;
+      if ('_id' in productData && productData._id) {
+        await updateProduct(productData._id, productData as Product);
+        showToast("Product updated successfully.");
+      } else {
+        const result = await addProduct(productData);
+        console.log(result);
+        showToast("Product added successfully.");
+      }
+      handleCloseModal();
+      fetchAndSetProducts();
+    } catch (error: any) {
+      // Check if it's a 413 error (Request Entity Too Large)
+      if (error?.status === 413) {
+        showToast(error?.message || "Upload failed: Files are too large.");
+      } else {
+        showToast(error?.message || "Failed to save product.");
+      }
+      throw error;
     }
   };
-  
+
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
@@ -158,8 +164,8 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     if (error) {
       return <tr><td colSpan={7} className="text-center py-16 text-red-500">{error}</td></tr>;
     }
-    const filteredProducts = products.filter(product => 
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const filteredProducts = products.filter(product =>
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       String(product.category).toLowerCase().includes(searchQuery.toLowerCase())
     );
 
@@ -221,7 +227,7 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
       </div>
 
       {!isLoading && !error && products.length > 0 && (
-        <Pagination 
+        <Pagination
           currentPage={currentPage}
           totalCount={totalProducts}
           pageSize={PRODUCTS_PER_PAGE}

@@ -30,12 +30,21 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   });
 
   if (!response.ok) {
+    // Try to get error message from API response
     const errorData = await response
       .json()
-      .catch(() => ({ message: "An unknown error occurred" }));
-    throw new Error(
-      errorData.message || `HTTP error! status: ${response.status}`
+      .catch(() => ({ message: null }));
+    
+    // Create error with API message or default message based on status
+    const error: any = new Error(
+      errorData.message || 
+      (response.status === 413 ? "Request Entity Too Large" : `HTTP error! status: ${response.status}`)
     );
+    
+    // Attach status code to error object for specific handling
+    error.status = response.status;
+    
+    throw error;
   }
 
   if (response.status === 204) {
