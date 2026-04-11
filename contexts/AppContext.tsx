@@ -92,6 +92,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [activePage]);
 
+  // Listen for unauthorized API responses to logout automatically
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+      showToast("Session expired. Please login again.");
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    };
+  }, [logout]);
+
   const login = async (name: string, password: string) => {
     const { user, token: authToken } = await apiLogin(name, password);
     sessionStorage.setItem('authToken', authToken);

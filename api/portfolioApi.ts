@@ -32,6 +32,9 @@ const apiRequest = async (endpoint: string = "", options: RequestInit = {}) => {
 
   // Handle non-OK responses
   if (!response.ok) {
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    }
     const errorData = await response.json().catch(() => ({
       message: "An unknown error occurred",
     }));
