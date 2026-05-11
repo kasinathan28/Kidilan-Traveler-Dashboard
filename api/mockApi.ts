@@ -125,6 +125,7 @@ export const getProducts = async (params: {
   search?: string;
   sortBy?: keyof Product | null;
   sortOrder?: "ascending" | "descending";
+  discounted?: boolean;
 }): Promise<ProductsApiResponse> => {
   const query = new URLSearchParams({
     page: String(params.page),
@@ -134,6 +135,7 @@ export const getProducts = async (params: {
   if (params.sortBy) query.set("sort", String(params.sortBy));
   if (params.sortOrder)
     query.set("order", params.sortOrder === "ascending" ? "asc" : "desc");
+  if (params.discounted) query.set("discounted", "true");
 
   const data = await apiRequest(`/admin/products?${query.toString()}`);
 
@@ -167,8 +169,8 @@ export const getProducts = async (params: {
 export const addProduct = (
   productData: Omit<Product, "_id">
 ): Promise<Product> => {
-  const { imageUrls, category, ...rest } = productData;
-  const payload = { ...rest, images: imageUrls, categoryId: category };
+  const { imageUrls, category, categoryId, ...rest } = productData as any;
+  const payload = { ...rest, images: imageUrls, categoryId: categoryId || category };
   return apiRequest("/admin/products", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -179,8 +181,8 @@ export const updateProduct = (
   id: string,
   productData: Product
 ): Promise<Product> => {
-  const { imageUrls, category, ...rest } = productData;
-  const payload = { ...rest, images: imageUrls, categoryId: category };
+  const { imageUrls, category, categoryId, ...rest } = productData;
+  const payload = { ...rest, images: imageUrls, categoryId: categoryId || category };
   return apiRequest(`/admin/products/${id}`, {
     method: "PUT",
     body: JSON.stringify(payload),
