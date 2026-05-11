@@ -68,7 +68,7 @@ export type SortConfig<T> = {
   direction: 'ascending' | 'descending';
 }
 
-export type Page = 'dashboard' | 'products' | 'categories' | 'orders' | 'reports' | 'offers' | 'websiteContent' | 'settings';
+export type Page = 'dashboard' | 'products' | 'categories' | 'orders' | 'reports' | 'websiteContent' | 'settings';
 
 export interface User {
   name: string;

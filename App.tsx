@@ -7,7 +7,6 @@ import CategoriesPage from './pages/CategoriesPage';
 import OrdersPage from './pages/OrdersPage';
 import ReportsPage from './pages/ReportsPage';
 import LoginPage from './pages/LoginPage';
-import OffersPage from './pages/OffersPage';
 import WebsiteContentPage from './pages/WebsiteContentPage';
 import { AppContext } from './contexts/AppContext';
 import Toast from './components/Toast';
@@ -38,10 +37,6 @@ const App: React.FC = () => {
       title: 'Reports',
       description: 'View detailed analytics and reports on your sales and products.',
     },
-    offers: {
-      title: 'Offers & Promotions',
-      description: 'Create and manage promotional offers for your store.',
-    },
     websiteContent: {
       title: 'Website Content',
       description: 'Manage banners and text content on your public website.',
@@ -66,8 +61,6 @@ const App: React.FC = () => {
         return <OrdersPage />;
       case 'reports':
         return <ReportsPage />;
-      case 'offers':
-        return <OffersPage />;
       case 'websiteContent':
         return <WebsiteContentPage />;
       default:

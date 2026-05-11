@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import { Product, SortConfig, Category } from '../types';
-import { EditIcon, DeleteIcon, ProductsIcon } from './icons';
+import { EditIcon, DeleteIcon, ProductsIcon, MoreOptionIcon } from './icons';
 import { getProducts, addProduct, updateProduct, deleteProduct, getCategories } from '../api/mockApi';
 import { AppContext } from '../contexts/AppContext';
 import ConfirmationModal from './ConfirmationModal';
 import ProductModal from './ProductModal';
+import OfferModal from './OfferModal';
 import Pagination from './Pagination';
 import SortableTableHeader from './SortableTableHeader';
 import LoadingSpinner from './LoadingSpinner';
 import { useDebounce } from '../hooks/useDebounce';
+import ProductRow from './ProductRow';
 
 const PRODUCTS_PER_PAGE = 5;
 
@@ -25,6 +27,11 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
   const [totalProducts, setTotalProducts] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<SortConfig<Product>>({ key: '_id', direction: 'descending' });
+  const [activeTab, setActiveTab] = useState<'all' | 'offers'>('all');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+  const [productForOffer, setProductForOffer] = useState<Product | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const { showToast } = useContext(AppContext);
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
@@ -36,9 +43,11 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
       prevFiltersRef.current.sort.key !== sortConfig.key ||
       prevFiltersRef.current.sort.direction !== sortConfig.direction;
 
-    const pageToFetch = filtersChanged ? 1 : currentPage;
+    const tabChanged = prevFiltersRef.current.search === '' && activeTab !== (prevFiltersRef.current as any).activeTab;
 
-    if (filtersChanged && currentPage !== 1) {
+    const pageToFetch = (filtersChanged || tabChanged) ? 1 : currentPage;
+
+    if ((filtersChanged || tabChanged) && currentPage !== 1) {
       setCurrentPage(1);
     }
 
@@ -51,6 +60,7 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
           limit: PRODUCTS_PER_PAGE,
           sortBy: sortConfig.key,
           sortOrder: sortConfig.direction,
+          discounted: activeTab === 'offers',
         }),
         getCategories() // Fetch all categories to map names
       ]);
@@ -62,6 +72,7 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
         const catId = p.categoryId || p.category;
         return {
           ...p,
+          categoryId: catId,
           category: (catId && categoryMap.get(catId)) || 'Uncategorized'
         };
       });
@@ -74,11 +85,21 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     } finally {
       setIsLoading(false);
     }
-    prevFiltersRef.current = { search: '', sort: sortConfig };
-  }, [currentPage, sortConfig, showToast]);
+    prevFiltersRef.current = { search: '', sort: sortConfig, activeTab } as any;
+  }, [currentPage, sortConfig, showToast, activeTab]);
 
   useEffect(() => {
     fetchAndSetProducts();
+  }, [fetchAndSetProducts, activeTab]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Don't automatically open modal on refresh/login - only when explicitly requested
@@ -143,6 +164,24 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     }
   };
 
+  const handleOfferClick = (product: Product) => {
+    setProductForOffer(product);
+    setIsOfferModalOpen(true);
+  };
+
+  const handleSaveOffer = async (id: string, discount: number) => {
+    try {
+      const productToUpdate = products.find(p => p._id === id);
+      if (productToUpdate) {
+        await updateProduct(id, { ...productToUpdate, discount });
+        showToast(discount > 0 ? "Offer updated successfully." : "Offer removed successfully.");
+        fetchAndSetProducts();
+      }
+    } catch (error) {
+      showToast("Failed to update offer.");
+    }
+  };
+
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
@@ -159,10 +198,10 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
 
   const renderTableContent = () => {
     if (isLoading) {
-      return <tr><td colSpan={7} className="text-center py-16"><LoadingSpinner /></td></tr>;
+      return <tr><td colSpan={6} className="text-center py-16"><LoadingSpinner /></td></tr>;
     }
     if (error) {
-      return <tr><td colSpan={7} className="text-center py-16 text-red-500">{error}</td></tr>;
+      return <tr><td colSpan={6} className="text-center py-16 text-red-500">{error}</td></tr>;
     }
     const filteredProducts = products.filter(product =>
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -170,47 +209,51 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     );
 
     if (filteredProducts.length === 0) {
-      return <tr><td colSpan={7} className="text-center py-16 text-gray-500">No products found.</td></tr>;
+      return <tr><td colSpan={6} className="text-center py-16 text-gray-500">No products found.</td></tr>;
     }
+
     return filteredProducts.map((product) => (
-      <tr key={product._id} className="bg-white border-b hover:bg-gray-50">
-        <td data-label="Image" className="px-6 py-4">
-          {product.imageUrls && product.imageUrls.length > 0 ? (
-            <img src={product.imageUrls[0]} alt={product.name} className="w-12 h-12 object-cover rounded-md" />
-          ) : (
-            <div className="w-12 h-12 bg-gray-200 rounded-md flex items-center justify-center">
-              <ProductsIcon className="w-6 h-6 text-gray-400" />
-            </div>
-          )}
-        </td>
-        <td data-label="Product Name" className="px-6 py-4 font-medium text-gray-900">{product.name}</td>
-        <td data-label="Category" className="px-6 py-4">{product.category}</td>
-        <td data-label="Price" className="px-6 py-4">${product.price.toFixed(2)}</td>
-        <td data-label="Stock" className="px-6 py-4">{product.stock}</td>
-        <td data-label="Actions" className="px-6 py-4 text-right space-x-2">
-          <button onClick={() => handleEditClick(product)} className="p-2 text-blue-600 hover:text-blue-800 rounded-full hover:bg-blue-100 transition-colors" aria-label={`Edit ${product.name}`}>
-            <EditIcon className="w-5 h-5" />
-          </button>
-          <button onClick={() => setProductToDelete(product)} className="p-2 text-red-600 hover:text-red-800 rounded-full hover:bg-red-100 transition-colors" aria-label={`Delete ${product.name}`}>
-            <DeleteIcon className="w-5 h-5" />
-          </button>
-        </td>
-      </tr>
+      <ProductRow
+        key={product._id}
+        product={product}
+        categories={categories}
+        openMenuId={openMenuId}
+        setOpenMenuId={setOpenMenuId}
+        handleEditClick={handleEditClick}
+        handleOfferClick={handleOfferClick}
+        setProductToDelete={setProductToDelete}
+      />
     ));
   };
 
 
   return (
     <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-bold text-gray-800">Product Sales</h3>
+       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div className="flex items-center space-x-6">
+          <h3 className="text-xl font-bold text-gray-800">Product Sales</h3>
+          <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'all' ? 'bg-white text-[#2D7A79] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setActiveTab('offers')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === 'offers' ? 'bg-white text-[#2D7A79] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Offers
+            </button>
+          </div>
+        </div>
         <button onClick={handleAddClick} className="px-5 py-2 bg-[#2D7A79] text-white rounded-lg font-semibold hover:bg-opacity-90 shadow-sm transition-all">
           Add Product
         </button>
       </div>
-      <div className="overflow-x-auto responsive-table">
-        <table className="w-full text-sm text-left text-gray-500">
-          <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+      <div className="overflow-visible">
+        <table className="w-full text-sm text-left text-gray-500 border-collapse">
+          <thead className="text-xs text-gray-500 uppercase bg-gray-50/50 border-y border-gray-100">
             <tr>
               <th scope="col" className="px-6 py-3">Image</th>
               <SortableTableHeader<Product> label="Product Name" sortKey="name" sortConfig={sortConfig} onSort={handleSort} />
@@ -241,6 +284,12 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
         onSave={handleSave}
         product={editingProduct}
         categories={categories}
+      />
+      <OfferModal
+        isOpen={isOfferModalOpen}
+        onClose={() => setIsOfferModalOpen(false)}
+        onSave={handleSaveOffer}
+        product={productForOffer}
       />
       <ConfirmationModal
         isOpen={!!productToDelete}
