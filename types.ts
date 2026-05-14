@@ -106,9 +106,10 @@ export interface WebsiteContent {
 export interface PortfolioItem {
   _id: string;
   title: string;
-  description: string;
-  imageUrl: string;
-  section: 'hero' | 'gallery' | 'featured';
+  description?: string;
+  imageUrl?: string;
+  url?: string;
+  section: 'hero' | 'gallery' | 'featured' | 'yt-videos';
   isActive: boolean;
   order: number;
   createdAt: string;

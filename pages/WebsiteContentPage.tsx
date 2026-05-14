@@ -6,7 +6,13 @@ import { AppContext } from '../contexts/AppContext';
 import { DeleteIcon, EditIcon } from '../components/icons';
 import ConfirmationModal from '../components/ConfirmationModal';
 
-type Tab = 'hero' | 'gallery' | 'featured';
+type Tab = 'hero' | 'gallery' | 'featured' | 'yt-videos';
+
+const getYouTubeId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+};
 
 const WebsiteContentPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<Tab>('hero');
@@ -31,6 +37,7 @@ const WebsiteContentPage: React.FC = () => {
                 <TabButton tabName="hero" label="Hero Section" />
                 <TabButton tabName="gallery" label="Gallery" />
                 <TabButton tabName="featured" label="Popular Tours" />
+                <TabButton tabName="yt-videos" label="YouTube Videos" />
             </div>
 
             <div>
@@ -119,6 +126,7 @@ const PortfolioManager: React.FC<PortfolioManagerProps> = ({ section, searchQuer
             case 'hero': return 'Hero Section';
             case 'gallery': return 'Gallery';
             case 'featured': return 'Popular Tours';
+            case 'yt-videos': return 'YouTube Videos';
             default: return 'Portfolio Items';
         }
     };
@@ -134,16 +142,16 @@ const PortfolioManager: React.FC<PortfolioManagerProps> = ({ section, searchQuer
                     }} 
                     className="px-5 py-2 bg-[#2D7A79] text-white rounded-lg font-semibold hover:bg-opacity-90 shadow-sm transition-all"
                 >
-                    Add {section === 'hero' ? 'Hero Image' : section === 'gallery' ? 'Gallery Item' : 'Popular Tours'}
+                    Add {section === 'hero' ? 'Hero Image' : section === 'gallery' ? 'Gallery Item' : section === 'featured' ? 'Popular Tours' : 'YouTube Video'}
                 </button>
             </div>
             {portfolioItems.length > 0 ? (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {portfolioItems.filter(item => 
                         item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                        item.description.toLowerCase().includes(searchQuery.toLowerCase())
+                        (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
                     ).map(item => (
-                        <div key={item._id} className="bg-gray-50 rounded-lg shadow-sm overflow-hidden group relative">
+                        <div key={item._id} className="bg-gray-50 rounded-lg shadow-sm overflow-hidden group relative border border-gray-100 hover:shadow-md transition-shadow">
                              <div className="absolute top-2 right-2 z-10 flex space-x-2">
                                 <button 
                                     onClick={() => handleEdit(item)}
@@ -160,11 +168,54 @@ const PortfolioManager: React.FC<PortfolioManagerProps> = ({ section, searchQuer
                                     <DeleteIcon className="w-5 h-5" />
                                 </button>
                             </div>
-                            <img src={item.imageUrl} alt={item.title} className="w-full h-48 object-cover" />
+                            
+                            {section === 'yt-videos' && item.url ? (
+                                <div className="relative aspect-video bg-black">
+                                    {getYouTubeId(item.url) ? (
+                                        <>
+                                            <img 
+                                                src={`https://img.youtube.com/vi/${getYouTubeId(item.url)}/mqdefault.jpg`} 
+                                                alt={item.title} 
+                                                className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" 
+                                            />
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <a 
+                                                    href={item.url} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                    className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform hover:bg-red-700"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                                                        <path d="M8 5v14l11-7z" />
+                                                    </svg>
+                                                </a>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-500">
+                                            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                item.imageUrl && <img src={item.imageUrl} alt={item.title} className="w-full h-48 object-cover" />
+                            )}
+
                             <div className="p-4">
-                                <h4 className="font-bold text-gray-800">{item.title}</h4>
-                                <p className="text-sm text-gray-600">{item.description}</p>
-                                {item.order && (
+                                <h4 className="font-bold text-gray-800 line-clamp-1">{item.title}</h4>
+                                {item.description && <p className="text-sm text-gray-600 line-clamp-2 mt-1">{item.description}</p>}
+                                {item.url && (
+                                    <div className="mt-3 flex items-center text-xs text-[#2D7A79] font-medium uppercase tracking-wider">
+                                        <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                                        </svg>
+                                        YouTube Video
+                                    </div>
+                                )}
+                                {item.order !== undefined && section !== 'yt-videos' && (
                                     <p className="text-xs text-gray-500 mt-2">Display Order: {item.order}</p>
                                 )}
                             </div>
@@ -190,7 +241,7 @@ const PortfolioManager: React.FC<PortfolioManagerProps> = ({ section, searchQuer
                 isOpen={!!itemToDelete}
                 onClose={() => setItemToDelete(null)}
                 onConfirm={handleDelete}
-                title={`Delete ${section === 'hero' ? 'Hero Image' : section === 'gallery' ? 'Gallery Item' : 'Popular Tours'}`}
+                title={`Delete ${section === 'hero' ? 'Hero Image' : section === 'gallery' ? 'Gallery Item' : section === 'featured' ? 'Popular Tours' : 'YouTube Video'}`}
                 message={`Are you sure you want to delete "${itemToDelete?.title}"?`}
                 variant="destructive"
             />
@@ -209,6 +260,7 @@ interface PortfolioItemModalProps {
 const PortfolioItemModal: React.FC<PortfolioItemModalProps> = ({ isOpen, onClose, onSave, section, itemToEdit }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
+    const [url, setUrl] = useState('');
     const [image, setImage] = useState<File | null>(null);
     const [order, setOrder] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -219,13 +271,15 @@ const PortfolioItemModal: React.FC<PortfolioItemModalProps> = ({ isOpen, onClose
         if (isOpen) {
             if (itemToEdit) {
                 setTitle(itemToEdit.title);
-                setDescription(itemToEdit.description);
+                setDescription(itemToEdit.description || '');
+                setUrl(itemToEdit.url || '');
                 setOrder(itemToEdit.order !== undefined ? String(itemToEdit.order) : '');
-                setImagePreview(itemToEdit.imageUrl);
+                setImagePreview(itemToEdit.imageUrl || null);
                 setImage(null);
             } else {
                 setTitle('');
                 setDescription('');
+                setUrl('');
                 setImage(null);
                 setOrder(''); // Set to empty string for new items
                 setImagePreview(null);
@@ -265,12 +319,18 @@ const PortfolioItemModal: React.FC<PortfolioItemModalProps> = ({ isOpen, onClose
             newErrors.title = 'Title is required';
         }
         
-        if (!description.trim()) {
-            newErrors.description = 'Description is required';
-        }
-        
-        if (!image && !itemToEdit) {
-            newErrors.image = 'Please upload an image';
+        if (section !== 'yt-videos') {
+            if (!description.trim()) {
+                newErrors.description = 'Description is required';
+            }
+            
+            if (!image && !itemToEdit) {
+                newErrors.image = 'Please upload an image';
+            }
+        } else {
+            if (!url.trim()) {
+                newErrors.url = 'YouTube URL is required';
+            }
         }
         
         setErrors(newErrors);
@@ -287,8 +347,12 @@ const PortfolioItemModal: React.FC<PortfolioItemModalProps> = ({ isOpen, onClose
         try {
             const formData = new FormData();
             formData.append('title', title);
-            formData.append('description', description);
-            if (image) formData.append('image', image);
+            if (section !== 'yt-videos') {
+                formData.append('description', description);
+                if (image) formData.append('image', image);
+            } else {
+                formData.append('url', url);
+            }
             formData.append('section', section);
             // Convert empty string to 0, otherwise parse the number
             const orderValue = order === '' ? 0 : parseInt(order, 10) || 0;
@@ -311,7 +375,7 @@ const PortfolioItemModal: React.FC<PortfolioItemModalProps> = ({ isOpen, onClose
                 <div className="p-6">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xl font-bold text-gray-800">
-                            {itemToEdit ? 'Edit' : 'Add'} {section === 'hero' ? 'Hero Image' : section === 'gallery' ? 'Gallery Item' : 'Popular Tours'}
+                            {itemToEdit ? 'Edit' : 'Add'} {section === 'hero' ? 'Hero Image' : section === 'gallery' ? 'Gallery Item' : section === 'featured' ? 'Popular Tours' : 'YouTube Video'}
                         </h3>
                         <button 
                             onClick={onClose}
@@ -338,94 +402,113 @@ const PortfolioItemModal: React.FC<PortfolioItemModalProps> = ({ isOpen, onClose
                             {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
                         </div>
                         
-                        <div>
-                            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                            <textarea
-                                id="description"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className={`w-full p-2 border rounded-md ${errors.description ? 'border-red-500' : 'border-gray-300'}`}
-                                rows={3}
-                                placeholder="Enter description"
-                            />
-                            {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
-                        </div>
-                        
-                        <div>
-                            <label htmlFor="order" className="block text-sm font-medium text-gray-700 mb-1">Display Order</label>
-                            <input
-                                type="text"
-                                id="order"
-                                inputMode="numeric"
-                                pattern="\d*"
-                                value={order}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    // Allow empty value during input to enable backspace; keep only digits when present
-                                    if (value === '') {
-                                        setOrder('');
-                                    } else {
-                                        setOrder(value.replace(/\D/g, ''));
-                                    }
-                                }}
-                                className="w-full p-2 border border-gray-300 rounded-md"
-                            />
-                            <p className="text-gray-500 text-xs mt-1">Lower numbers appear first</p>
-                        </div>
-                        
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Image</label>
-                            <div className="flex items-center justify-center w-full">
-                                <label 
-                                    className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 ${
-                                        errors.image ? 'border-red-500' : 'border-gray-300'
-                                    }`}
-                                >
-                                    {imagePreview ? (
-                                        <div className="relative w-full h-full">
-                                            <img 
-                                                src={imagePreview} 
-                                                alt="Preview" 
-                                                className="w-full h-full object-contain"
-                                            />
-                                            <button 
-                                                type="button"
-                                                onClick={() => {
-                                                    setImage(null);
-                                                    setImagePreview(null);
-                                                }}
-                                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
-                                                aria-label="Remove image"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                            <svg className="w-8 h-8 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                            </svg>
-                                            <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                            <p className="text-xs text-gray-500">JPG, JPEG, PNG or GIF (MAX. 5MB)</p>
-                                        </div>
-                                    )}
-                                    <input 
-                                        id="image" 
-                                        type="file" 
-                                        className="hidden" 
-                                        accept="image/jpeg,image/jpg,image/png,image/gif"
-                                        onChange={handleImageChange}
-                                    />
-                                </label>
+                        {section !== 'yt-videos' ? (
+                            <div>
+                                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <textarea
+                                    id="description"
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    className={`w-full p-2 border rounded-md ${errors.description ? 'border-red-500' : 'border-gray-300'}`}
+                                    rows={3}
+                                    placeholder="Enter description"
+                                />
+                                {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
                             </div>
-                            {errors.image && (
-                                <div className="mt-2">
-                                    <p className="text-red-500 text-sm font-medium">{errors.image}</p>
+                        ) : (
+                            <div>
+                                <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-1">YouTube URL</label>
+                                <input
+                                    type="text"
+                                    id="url"
+                                    value={url}
+                                    onChange={(e) => setUrl(e.target.value)}
+                                    className={`w-full p-2 border rounded-md ${errors.url ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter YouTube video URL"
+                                />
+                                {errors.url && <p className="text-red-500 text-xs mt-1">{errors.url}</p>}
+                            </div>
+                        )}
+                        
+                        {section !== 'yt-videos' && (
+                            <div>
+                                <label htmlFor="order" className="block text-sm font-medium text-gray-700 mb-1">Display Order</label>
+                                <input
+                                    type="text"
+                                    id="order"
+                                    inputMode="numeric"
+                                    pattern="\d*"
+                                    value={order}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        // Allow empty value during input to enable backspace; keep only digits when present
+                                        if (value === '') {
+                                            setOrder('');
+                                        } else {
+                                            setOrder(value.replace(/\D/g, ''));
+                                        }
+                                    }}
+                                    className="w-full p-2 border border-gray-300 rounded-md"
+                                />
+                                <p className="text-gray-500 text-xs mt-1">Lower numbers appear first</p>
+                            </div>
+                        )}
+                        
+                        {section !== 'yt-videos' && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Image</label>
+                                <div className="flex items-center justify-center w-full">
+                                    <label 
+                                        className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 ${
+                                            errors.image ? 'border-red-500' : 'border-gray-300'
+                                        }`}
+                                    >
+                                        {imagePreview ? (
+                                            <div className="relative w-full h-full">
+                                                <img 
+                                                    src={imagePreview} 
+                                                    alt="Preview" 
+                                                    className="w-full h-full object-contain"
+                                                />
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setImage(null);
+                                                        setImagePreview(null);
+                                                    }}
+                                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                                                    aria-label="Remove image"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                                <svg className="w-8 h-8 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                                </svg>
+                                                <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                                                <p className="text-xs text-gray-500">JPG, JPEG, PNG or GIF (MAX. 5MB)</p>
+                                            </div>
+                                        )}
+                                        <input 
+                                            id="image" 
+                                            type="file" 
+                                            className="hidden" 
+                                            accept="image/jpeg,image/jpg,image/png,image/gif"
+                                            onChange={handleImageChange}
+                                        />
+                                    </label>
                                 </div>
-                            )}
-                        </div>
+                                {errors.image && (
+                                    <div className="mt-2">
+                                        <p className="text-red-500 text-sm font-medium">{errors.image}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         
                         <div className="flex justify-end space-x-3 pt-4">
                             <button
