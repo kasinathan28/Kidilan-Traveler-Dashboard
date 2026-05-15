@@ -248,7 +248,7 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
             {new Date(order.date).toLocaleDateString()}
           </td>
           <td data-label="Total" className="px-6 py-4 font-medium">
-            ${order.totalAmount.toFixed(2)}
+            ₹{order.totalAmount.toFixed(2)}
           </td>
           <td data-label="Status" className="px-6 py-4">
             <div className="flex items-center">
