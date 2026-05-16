@@ -224,17 +224,24 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     }
     return filteredOrders.map((order) => (
       <React.Fragment key={order._id}>
-        <tr className="bg-white border-b hover:bg-gray-50">
+        <tr className={`${order.isPreorder ? "bg-purple-50 hover:bg-purple-100 border-purple-200" : "bg-white hover:bg-gray-50"} border-b transition-colors`}>
           <td data-label="Order ID" className="px-6 py-4">
-            <button
-              onClick={() => handleToggleExpand(order._id)}
-              className="flex items-center text-[#2D7A79] hover:underline font-mono text-sm group"
-            >
-              #{order._id.slice(-6).toUpperCase()}
-              <ChevronDownIcon
-                className={`w-4 h-4 ml-2 transition-transform transform group-hover:text-gray-700 ${expandedOrderId === order._id ? "rotate-180" : ""}`}
-              />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleToggleExpand(order._id)}
+                className="flex items-center text-[#2D7A79] hover:underline font-mono text-sm group"
+              >
+                #{order._id.slice(-6).toUpperCase()}
+                <ChevronDownIcon
+                  className={`w-4 h-4 ml-2 transition-transform transform group-hover:text-gray-700 ${expandedOrderId === order._id ? "rotate-180" : ""}`}
+                />
+              </button>
+              {order.isPreorder && (
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-purple-200 text-purple-800 rounded-full border border-purple-300">
+                  Preorder
+                </span>
+              )}
+            </div>
           </td>
           <td data-label="Customer" className="px-6 py-4">
             <div className="font-medium text-gray-900">
@@ -276,7 +283,7 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
           </td>
         </tr>
         {expandedOrderId === order._id && (
-          <tr className="responsive-table-details bg-gray-50 md:bg-gray-50/50">
+          <tr className={`responsive-table-details ${order.isPreorder ? "bg-purple-50/50 md:bg-purple-50/80" : "bg-gray-50 md:bg-gray-50/50"}`}>
             <td colSpan={6} className="p-0">
               <div className="p-4">
                 {/* Shipping Address */}

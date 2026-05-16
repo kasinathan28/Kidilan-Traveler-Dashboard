@@ -29,6 +29,7 @@ export interface Order {
   date: string; // maps from placedAt
   customerName: string; // derived from shippingAddress
   customerEmail: string; // derived from shippingAddress
+  isPreorder?: boolean;
 }
 
 

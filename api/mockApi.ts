@@ -254,7 +254,13 @@ export const getOrders = async (params: {
     _id: o._id,
     date: o.placedAt,
     status: o.orderStatus,
-    items: o.orderItems,
+    isPreorder: o.isPreorder,
+    items: (o.orderItems || []).map((item: any, index: number) => ({
+      productId: item.productId?._id || item.productId || `unknown-${index}`,
+      productName: item.productId?.name || "Unknown/Deleted Product",
+      quantity: item.quantity,
+      price: item.price
+    })),
     totalAmount: o.totalAmount,
     paymentMethod: o.paymentMethod,
     paymentStatus: o.paymentStatus,
