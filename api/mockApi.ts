@@ -84,6 +84,15 @@ export const login = async (
     token: data.token,
   };
 };
+export const changePassword = async (
+  oldPassword: string,
+  newPassword: string
+): Promise<{ message: string }> => {
+  return apiRequest("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ oldPassword, newPassword }),
+  });
+};
 
 
 // --- DASHBOARD ---
@@ -386,3 +395,24 @@ export const updateWebsiteContents = (
   mockWebsiteContent = contents;
   return mockApiRequest(mockWebsiteContent);
 };
+
+// --- STOREFRONT PROMOTION SETTINGS ---
+export interface OfferCountdownSetting {
+  endTime: string;
+  isActive: boolean;
+  label?: string;
+}
+
+export const getOfferCountdown = async (): Promise<OfferCountdownSetting> => {
+  return apiRequest('/settings/offer');
+};
+
+export const updateOfferCountdown = async (
+  setting: OfferCountdownSetting
+): Promise<OfferCountdownSetting> => {
+  return apiRequest('/settings/offer', {
+    method: 'PUT',
+    body: JSON.stringify(setting),
+  });
+};
+

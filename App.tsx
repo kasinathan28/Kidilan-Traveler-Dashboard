@@ -8,6 +8,7 @@ import OrdersPage from './pages/OrdersPage';
 import ReportsPage from './pages/ReportsPage';
 import LoginPage from './pages/LoginPage';
 import WebsiteContentPage from './pages/WebsiteContentPage';
+import SettingsPage from './pages/SettingsPage';
 import { AppContext } from './contexts/AppContext';
 import Toast from './components/Toast';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -63,6 +64,8 @@ const App: React.FC = () => {
         return <ReportsPage />;
       case 'websiteContent':
         return <WebsiteContentPage />;
+      case 'settings':
+        return <SettingsPage />;
       default:
         return <DashboardPage />;
     }
