@@ -1,4 +1,4 @@
-export interface Address {
+﻿export interface Address {
   name: string;
   email?: string;
   street: string;
@@ -11,8 +11,17 @@ export interface Address {
 export interface OrderItem {
   productId: string;
   productName?: string; 
+  variantLabel?: string; // the colour / size bought, e.g. "Black / M"
   quantity: number;
   price: number;
+}
+
+export interface ProductVariant {
+  sku?: string;
+  attributes: { color?: string; size?: string };
+  stock: number;
+  price?: number | null; // null: the product price
+  image?: number | null; // the product photo shown for this colour
 }
 
 export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
@@ -20,8 +29,11 @@ export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | '
 
 export interface Order {
   _id: string;
+  orderNumber?: string; // the ORD- number the customer sees
   items: OrderItem[];
   totalAmount: number;
+  deliveryFee?: number;
+  customerPhone?: string;
   paymentMethod: 'card' | 'paypal' | 'cod' | 'razorpay';
   paymentStatus: 'pending' | 'paid' | 'failed';
   status: OrderStatus;
@@ -44,6 +56,8 @@ export interface Category {
   description: string;
   imageUrl: string; // maps from 'image'
   productCount?: number;
+  showInHero?: boolean; // shown as a card in the storefront home hero
+  parentCategory?: string | null; // set = this is a sub-category of that category (one level deep)
 }
 
 export interface Product {
@@ -57,6 +71,8 @@ export interface Product {
   categoryId?: string;
   imageUrls: string[];
   specifications: { key: string; value: string; }[];
+  variants?: ProductVariant[];
+  showInHero?: boolean; // shown in the storefront home hero carousel
 }
 
 export interface ProductsApiResponse {
@@ -69,7 +85,7 @@ export type SortConfig<T> = {
   direction: 'ascending' | 'descending';
 }
 
-export type Page = 'dashboard' | 'products' | 'categories' | 'orders' | 'reports' | 'websiteContent' | 'settings';
+export type Page = 'dashboard' | 'products' | 'categories' | 'orders' | 'reviews' | 'customers' | 'reports' | 'websiteContent' | 'settings';
 
 export interface User {
   name: string;
@@ -104,6 +120,55 @@ export interface WebsiteContent {
   value: string;
 }
 
+// A ready-made size list for the product form, suggested for the categories it is linked to.
+export interface SizeSet {
+  id: string;
+  name: string;
+  sizes: string[];
+  categoryIds: string[];
+}
+
+export interface ReviewProduct {
+  _id: string;
+  name: string;
+  images: string[];
+  imageThumbs?: string[];
+  price?: number;
+}
+
+export interface Review {
+  _id: string;
+  productId: string;
+  product: ReviewProduct | null;
+  name: string;
+  rating: number;
+  comment: string;
+  isVerified: boolean;
+  isPublished: boolean; // false: hidden from the shop
+  isFeatured: boolean; // shown on the home page
+  // the customer account that wrote it (reviews from before sign-in existed have none)
+  userId?: { _id: string; name: string; email?: string } | string | null;
+  editedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ReviewStatusFilter = '' | 'published' | 'hidden' | 'featured';
+
+export interface ReviewsApiResponse {
+  reviews: Review[];
+  totalCount: number;
+}
+
+export interface ReviewStats {
+  total: number;
+  published: number;
+  hidden: number;
+  featured: number;
+  avgRating: number;
+  products: { productId: string; name: string; count: number; avgRating: number }[];
+}
+
 export interface PortfolioItem {
   _id: string;
   title: string;
@@ -131,4 +196,49 @@ export interface AppContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   updateUser: (user: User) => void;
+}
+// --- Customers (shop accounts made through Supabase Auth: Google or email + password) ---
+export type CustomerStatusFilter = '' | 'active' | 'blocked';
+
+export interface Customer {
+  _id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  avatarUrl?: string;
+  authProvider?: string; // 'google' | 'email'
+  isBlocked: boolean;
+  lastSignInAt?: string;
+  createdAt: string;
+  counts: { orders: number; reviews: number; cart: number; wishlist: number };
+}
+
+export interface CustomersApiResponse {
+  customers: Customer[];
+  totalCount: number;
+}
+
+export interface CustomerStats {
+  total: number;
+  blocked: number;
+  newLast30: number;
+  google: number;
+}
+
+// One of the customer's orders as the API returns it (only the fields the detail panel shows).
+export interface CustomerOrder {
+  _id: string;
+  orderNumber?: string;
+  status: string;
+  paymentStatus?: string;
+  totalAmount: number;
+  placedAt?: string;
+  createdAt?: string;
+  orderItems?: { quantity: number }[];
+}
+
+export interface CustomerDetail {
+  customer: Customer;
+  orders: CustomerOrder[];
+  reviews: Review[];
 }

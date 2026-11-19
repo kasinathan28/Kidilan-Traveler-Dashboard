@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import { Product, SortConfig, Category } from '../types';
 import { EditIcon, DeleteIcon, ProductsIcon, MoreOptionIcon } from './icons';
-import { getProducts, addProduct, updateProduct, deleteProduct, getCategories } from '../api/mockApi';
+import { getProducts, addProduct, updateProduct, deleteProduct, getCategories, setProductHero } from '../api/mockApi';
 import { AppContext } from '../contexts/AppContext';
 import ConfirmationModal from './ConfirmationModal';
 import ProductModal from './ProductModal';
 import OfferModal from './OfferModal';
 import Pagination from './Pagination';
 import SortableTableHeader from './SortableTableHeader';
+import { categoryLabel } from '../utils/categories';
 import LoadingSpinner from './LoadingSpinner';
 import { useDebounce } from '../hooks/useDebounce';
+import { usePageSize } from '../hooks/usePageSize';
 import ProductRow from './ProductRow';
 
-const PRODUCTS_PER_PAGE = 5;
 
 const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -26,6 +27,7 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
 
   const [totalProducts, setTotalProducts] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize('products');
   const [sortConfig, setSortConfig] = useState<SortConfig<Product>>({ key: '_id', direction: 'descending' });
   const [activeTab, setActiveTab] = useState<'all' | 'offers'>('all');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -36,61 +38,68 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
   const { showToast } = useContext(AppContext);
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
-  const prevFiltersRef = useRef({ search: debouncedSearchQuery, sort: sortConfig });
+  // Search, sort, tab and rows per page are applied on the server; any change sends the user back to page 1.
+  const filterKey = `${debouncedSearchQuery}|${String(sortConfig.key)}|${sortConfig.direction}|${activeTab}|${pageSize}`;
+  const lastFilterKey = useRef(filterKey);
+  // Only the newest request may update state (page clicks can overlap).
+  const requestId = useRef(0);
 
   const fetchAndSetProducts = useCallback(async () => {
-    const filtersChanged =
-      prevFiltersRef.current.sort.key !== sortConfig.key ||
-      prevFiltersRef.current.sort.direction !== sortConfig.direction;
-
-    const tabChanged = prevFiltersRef.current.search === '' && activeTab !== (prevFiltersRef.current as any).activeTab;
-
-    const pageToFetch = (filtersChanged || tabChanged) ? 1 : currentPage;
-
-    if ((filtersChanged || tabChanged) && currentPage !== 1) {
-      setCurrentPage(1);
+    let page = currentPage;
+    if (lastFilterKey.current !== filterKey) {
+      lastFilterKey.current = filterKey;
+      if (currentPage !== 1) {
+        setCurrentPage(1); // re-runs this effect with page 1
+        return;
+      }
+      page = 1;
     }
 
+    const id = ++requestId.current;
     setIsLoading(true);
     setError(null);
     try {
       const [productsData, categoriesData] = await Promise.all([
         getProducts({
-          page: pageToFetch,
-          limit: PRODUCTS_PER_PAGE,
+          page,
+          limit: pageSize,
+          search: debouncedSearchQuery.trim() || undefined,
           sortBy: sortConfig.key,
           sortOrder: sortConfig.direction,
           discounted: activeTab === 'offers',
         }),
         getCategories() // Fetch all categories to map names
       ]);
+      if (id !== requestId.current) return;
 
       setCategories(categoriesData);
-      const categoryMap = new Map(categoriesData.map(c => [c._id, c.name]));
 
       const productsWithCategoryNames = productsData.products.map(p => {
         const catId = p.categoryId || p.category;
         return {
           ...p,
           categoryId: catId,
-          category: (catId && categoryMap.get(catId)) || 'Uncategorized'
+          category: categoryLabel(catId, categoriesData) || 'Uncategorized'
         };
       });
 
       setProducts(productsWithCategoryNames);
       setTotalProducts(productsData.totalCount);
+      // e.g. last item on the last page was deleted: step back to a page that exists
+      const lastPage = Math.max(Math.ceil(productsData.totalCount / pageSize), 1);
+      if (page > lastPage) setCurrentPage(lastPage);
     } catch (err) {
+      if (id !== requestId.current) return;
       setError("Failed to fetch products. Please try again later.");
       showToast("Failed to fetch products");
     } finally {
-      setIsLoading(false);
+      if (id === requestId.current) setIsLoading(false);
     }
-    prevFiltersRef.current = { search: '', sort: sortConfig, activeTab } as any;
-  }, [currentPage, sortConfig, showToast, activeTab]);
+  }, [currentPage, filterKey, debouncedSearchQuery, sortConfig, showToast, activeTab]);
 
   useEffect(() => {
     fetchAndSetProducts();
-  }, [fetchAndSetProducts, activeTab]);
+  }, [fetchAndSetProducts]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -182,6 +191,23 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     }
   };
 
+  // Tick = show in the storefront home hero carousel. Optimistic; put back if the save fails.
+  const [heroBusyId, setHeroBusyId] = useState<string | null>(null);
+  const handleToggleHero = async (product: Product) => {
+    const next = !product.showInHero;
+    setHeroBusyId(product._id);
+    setProducts((prev) => prev.map((p) => (p._id === product._id ? { ...p, showInHero: next } : p)));
+    try {
+      await setProductHero(product._id, next);
+      showToast(next ? `"${product.name}" will show in the home hero.` : `"${product.name}" removed from the home hero.`);
+    } catch (error: any) {
+      setProducts((prev) => prev.map((p) => (p._id === product._id ? { ...p, showInHero: !next } : p)));
+      showToast(error?.message || 'Could not update the home hero.');
+    } finally {
+      setHeroBusyId(null);
+    }
+  };
+
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
@@ -198,21 +224,16 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
 
   const renderTableContent = () => {
     if (isLoading) {
-      return <tr><td colSpan={6} className="text-center py-16"><LoadingSpinner /></td></tr>;
+      return <tr><td colSpan={7} className="text-center py-16"><LoadingSpinner /></td></tr>;
     }
     if (error) {
-      return <tr><td colSpan={6} className="text-center py-16 text-red-500">{error}</td></tr>;
+      return <tr><td colSpan={7} className="text-center py-16 text-red-500">{error}</td></tr>;
     }
-    const filteredProducts = products.filter(product =>
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      String(product.category).toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    if (filteredProducts.length === 0) {
-      return <tr><td colSpan={6} className="text-center py-16 text-gray-500">No products found.</td></tr>;
+    if (products.length === 0) {
+      return <tr><td colSpan={7} className="text-center py-16 text-gray-500">No products found.</td></tr>;
     }
 
-    return filteredProducts.map((product) => (
+    return products.map((product) => (
       <ProductRow
         key={product._id}
         product={product}
@@ -222,6 +243,8 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
         handleEditClick={handleEditClick}
         handleOfferClick={handleOfferClick}
         setProductToDelete={setProductToDelete}
+        onToggleHero={handleToggleHero}
+        heroBusy={heroBusyId === product._id}
       />
     ));
   };
@@ -260,6 +283,7 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
               <SortableTableHeader<Product> label="Category" sortKey="category" sortConfig={sortConfig} onSort={handleSort} />
               <SortableTableHeader<Product> label="Price" sortKey="price" sortConfig={sortConfig} onSort={handleSort} />
               <SortableTableHeader<Product> label="Stock" sortKey="stock" sortConfig={sortConfig} onSort={handleSort} />
+              <th scope="col" className="px-6 py-3 text-center" title="Show in the home page hero carousel">Home hero</th>
               <th scope="col" className="px-6 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -273,7 +297,8 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
         <Pagination
           currentPage={currentPage}
           totalCount={totalProducts}
-          pageSize={PRODUCTS_PER_PAGE}
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
           onPageChange={page => setCurrentPage(page)}
         />
       )}
