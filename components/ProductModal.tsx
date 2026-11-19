@@ -5,6 +5,7 @@ import { getSizeSets, saveSizeSets } from '../api/mockApi';
 import { XIcon } from './icons';
 import ProductOptions, { OptionsState, optionsFromVariants, variantsFromOptions, optionsError, combinations } from './ProductOptions';
 import { AppContext } from '../contexts/AppContext';
+import { groupCategories } from '../utils/categories';
 
 const useFocusTrap = (ref: React.RefObject<HTMLElement>, isOpen: boolean) => {
   useEffect(() => {
@@ -467,9 +468,13 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
               aria-invalid={!!errors.category}
             >
               <option value="" disabled>Select a category</option>
-              {categories.map(cat => (
-                <option key={cat._id} value={cat._id}>{cat.name}</option>
-              ))}
+              {/* Each main category, then its sub-categories indented under it */}
+              {groupCategories(categories).flatMap(({ category: cat, children }) => [
+                <option key={cat._id} value={cat._id}>{cat.name}</option>,
+                ...children.map((sub) => (
+                  <option key={sub._id} value={sub._id}>{'\u00A0\u00A0\u00A0\u00A0'}{sub.name}</option>
+                )),
+              ])}
             </select>
             {errors.category && <p className="text-red-600 text-sm mt-1">{errors.category}</p>}
           </div>

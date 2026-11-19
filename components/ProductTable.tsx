@@ -8,6 +8,7 @@ import ProductModal from './ProductModal';
 import OfferModal from './OfferModal';
 import Pagination from './Pagination';
 import SortableTableHeader from './SortableTableHeader';
+import { categoryLabel } from '../utils/categories';
 import LoadingSpinner from './LoadingSpinner';
 import { useDebounce } from '../hooks/useDebounce';
 import { usePageSize } from '../hooks/usePageSize';
@@ -72,14 +73,13 @@ const ProductTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
       if (id !== requestId.current) return;
 
       setCategories(categoriesData);
-      const categoryMap = new Map(categoriesData.map(c => [c._id, c.name]));
 
       const productsWithCategoryNames = productsData.products.map(p => {
         const catId = p.categoryId || p.category;
         return {
           ...p,
           categoryId: catId,
-          category: (catId && categoryMap.get(catId)) || 'Uncategorized'
+          category: categoryLabel(catId, categoriesData) || 'Uncategorized'
         };
       });
 

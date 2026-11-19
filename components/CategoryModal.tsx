@@ -8,10 +8,12 @@ interface CategoryModalProps {
   onClose: () => void;
   onSave: (category: Omit<Category, '_id'> | Category) => Promise<void>;
   category: Category | null;
+  categories: Category[];
+  defaultParentId?: string | null; // "Add sub-category" on a card opens the form with that card as the parent
 }
 
 type FormErrors = {
-  [key in keyof Omit<Category, '_id' | 'productCount'>]?: string;
+  [key in keyof Omit<Category, '_id' | 'productCount' | 'parentCategory'>]?: string;
 };
 
 const useFocusTrap = (ref: React.RefObject<HTMLElement>, isOpen: boolean) => {
@@ -46,10 +48,12 @@ const useFocusTrap = (ref: React.RefObject<HTMLElement>, isOpen: boolean) => {
     }, [isOpen, ref]);
 };
 
-const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, onSave, category }) => {
-  const initialState = { name: '', description: '', imageUrl: '' };
-  
-  const getInitialState = () => category ? { name: category.name, description: category.description, imageUrl: category.imageUrl } : initialState;
+const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, onSave, category, categories, defaultParentId }) => {
+  const initialState = { name: '', description: '', imageUrl: '', parentCategory: defaultParentId || '' };
+
+  const getInitialState = () => category
+    ? { name: category.name, description: category.description || '', imageUrl: category.imageUrl || '', parentCategory: category.parentCategory || '' }
+    : initialState;
 
   const [formData, setFormData] = useState(getInitialState());
   const [errors, setErrors] = useState<FormErrors>({});
@@ -65,11 +69,19 @@ const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, onSave, 
       setErrors({});
       setIsSubmitting(false);
     }
-  }, [isOpen, category]);
+  }, [isOpen, category, defaultParentId]);
 
   if (!isOpen) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  // Only main categories can be parents (one level deep), and never the category itself.
+  const parentOptions = categories
+    .filter((c) => !c.parentCategory && c._id !== category?._id)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const hasChildren = !!category && categories.some((c) => c.parentCategory === category._id);
+  const isSub = !!formData.parentCategory;
+  const kind = isSub ? 'Sub-category' : 'Category';
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name as keyof FormErrors]) {
@@ -103,8 +115,9 @@ const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, onSave, 
   const validate = () => {
     const newErrors: FormErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Category name is required.';
-    if (!formData.description.trim()) newErrors.description = 'Description is required.';
-    if (!formData.imageUrl.trim()) {
+    // Sub-categories only need a name; main categories show on the storefront with their picture.
+    if (!isSub && !formData.description.trim()) newErrors.description = 'Description is required.';
+    if (!isSub && !formData.imageUrl.trim()) {
         newErrors.imageUrl = 'Image is required.';
     }
     setErrors(newErrors);
@@ -121,6 +134,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, onSave, 
       name: formData.name,
       description: formData.description,
       imageUrl: formData.imageUrl,
+      parentCategory: formData.parentCategory || null,
     };
     
     try {
@@ -132,11 +146,11 @@ const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, onSave, 
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div ref={modalRef} className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md relative">
+      <div ref={modalRef} className="bg-white rounded-xl shadow-2xl p-8 w-full max-w-md relative max-h-[90vh] overflow-y-auto">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800" aria-label="Close modal">
           <XIcon className="w-6 h-6" />
         </button>
-        <h2 id="modal-title" className="text-2xl font-bold mb-6 text-gray-800">{category ? 'Edit Category' : 'Add Category'}</h2>
+        <h2 id="modal-title" className="text-2xl font-bold mb-6 text-gray-800">{category ? `Edit ${kind}` : `Add ${kind}`}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Category Name</label>
@@ -145,13 +159,35 @@ const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, onSave, 
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label htmlFor="parentCategory" className="block text-sm font-medium text-gray-700 mb-1">Parent category</label>
+            <select
+              id="parentCategory"
+              name="parentCategory"
+              value={formData.parentCategory}
+              onChange={handleChange}
+              disabled={hasChildren}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2D7A79] disabled:bg-gray-100 disabled:text-gray-500"
+            >
+              <option value="">None (main category)</option>
+              {parentOptions.map((c) => (
+                <option key={c._id} value={c._id}>{c.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {hasChildren
+                ? 'This category has sub-categories, so it stays a main category.'
+                : 'Pick a parent to make this a sub-category, e.g. Travel Bags under Backpacks.'}
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Description{isSub && <span className="text-gray-400 font-normal"> (optional)</span>}</label>
             <textarea id="description" name="description" value={formData.description} onChange={handleChange} rows={3} placeholder="Enter a short description for the category" className={`w-full p-3 border rounded-lg focus:ring-2 ${errors.description ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-[#2D7A79]'}`} aria-invalid={!!errors.description} />
             {errors.description && <p className="text-red-600 text-sm mt-1">{errors.description}</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category Image</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{kind} Image{isSub && <span className="text-gray-400 font-normal"> (optional)</span>}</label>
             <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
               <div className="space-y-1 text-center">
                 {formData.imageUrl ? (
@@ -202,7 +238,7 @@ const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, onSave, 
             <button type="button" onClick={onClose} disabled={isSubmitting} className="px-6 py-2 rounded-lg text-gray-700 bg-gray-200 hover:bg-gray-300 disabled:opacity-50">Cancel</button>
             <button type="submit" disabled={isSubmitting} className="px-6 py-2 rounded-lg text-white bg-[#2D7A79] hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center">
               {isSubmitting && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>}
-              {isSubmitting ? 'Saving...' : 'Save Category'}
+              {isSubmitting ? 'Saving...' : `Save ${kind}`}
             </button>
           </div>
         </form>

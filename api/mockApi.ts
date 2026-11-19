@@ -226,6 +226,7 @@ export const getCategories = async (): Promise<Category[]> => {
     _id: c._id,
     imageUrl: c.image,
     productCount: c.productCount || 0,
+    parentCategory: c.parentCategory ? String(c.parentCategory) : null,
   }));
 };
 

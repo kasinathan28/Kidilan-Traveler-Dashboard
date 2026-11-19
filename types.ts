@@ -57,6 +57,7 @@ export interface Category {
   imageUrl: string; // maps from 'image'
   productCount?: number;
   showInHero?: boolean; // shown as a card in the storefront home hero
+  parentCategory?: string | null; // set = this is a sub-category of that category (one level deep)
 }
 
 export interface Product {
