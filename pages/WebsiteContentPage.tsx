@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { PortfolioItem } from '../types';
 import { getPortfolioItems, createPortfolioItem, deletePortfolioItem, updatePortfolioItem } from '../api/portfolioApi';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { uploadImageToR2 } from '../api/imageUpload';
 import { AppContext } from '../contexts/AppContext';
 import { DeleteIcon, EditIcon } from '../components/icons';
 import ConfirmationModal from '../components/ConfirmationModal';
@@ -298,8 +299,8 @@ const PortfolioItemModal: React.FC<PortfolioItemModalProps> = ({ isOpen, onClose
             return;
         }
 
-        if (file.size > 5 * 1024 * 1024) {
-            setErrors(prev => ({ ...prev, image: 'Image size must be less than 5MB' }));
+        if (file.size > 10 * 1024 * 1024) {
+            setErrors(prev => ({ ...prev, image: 'Image size must be less than 10MB' }));
             return;
         }
 
@@ -349,7 +350,12 @@ const PortfolioItemModal: React.FC<PortfolioItemModalProps> = ({ isOpen, onClose
             formData.append('title', title);
             if (section !== 'yt-videos') {
                 formData.append('description', description);
-                if (image) formData.append('image', image);
+                if (image) {
+                    // upload straight to R2; if that is unavailable fall back to sending the file to the API
+                    const uploaded = await uploadImageToR2(image, 'portfolio');
+                    if (uploaded) formData.append('imageUrl', uploaded);
+                    else formData.append('image', image);
+                }
             } else {
                 formData.append('url', url);
             }
@@ -490,7 +496,7 @@ const PortfolioItemModal: React.FC<PortfolioItemModalProps> = ({ isOpen, onClose
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                                 </svg>
                                                 <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                                <p className="text-xs text-gray-500">JPG, JPEG, PNG or GIF (MAX. 5MB)</p>
+                                                <p className="text-xs text-gray-500">JPG, JPEG, PNG or GIF (MAX. 10MB)</p>
                                             </div>
                                         )}
                                         <input 

@@ -9,6 +9,16 @@ import {
   Offer,
   BannerImage,
   WebsiteContent,
+  Review,
+  ReviewsApiResponse,
+  ReviewStats,
+  ReviewStatusFilter,
+  SizeSet,
+  Customer,
+  CustomersApiResponse,
+  CustomerStats,
+  CustomerStatusFilter,
+  CustomerDetail,
 } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_URL;
@@ -97,14 +107,13 @@ export const changePassword = async (
 
 // --- DASHBOARD ---
 export const getDashboardStats = async (): Promise<any> => {
-  // Assuming /admin/metrics provides stats
-  // The new spec is not clear on the structure. This is an assumed structure.
-  const metrics = await apiRequest("/admin/metrics");
+  // Backend returns { totals: { users, products, categories, orders, sales }, recentOrders }
+  const { totals = {} } = await apiRequest("/admin/metrics");
   return {
-    totalSales: { value: metrics.totalRevenue || 0 },
-    totalOrders: { value: metrics.totalOrders || 0 },
-    totalProducts: { value: metrics.totalProducts || 0 },
-    totalCategories: { value: metrics.totalCategories || 0 },
+    totalSales: { value: totals.sales || 0 },
+    totalOrders: { value: totals.orders || 0 },
+    totalProducts: { value: totals.products || 0 },
+    totalCategories: { value: totals.categories || 0 },
   };
 };
 
@@ -198,6 +207,13 @@ export const updateProduct = (
   });
 };
 
+// Only flips the hero-carousel flag; nothing else on the product changes.
+export const setProductHero = (id: string, showInHero: boolean): Promise<Product> =>
+  apiRequest(`/admin/products/${id}/hero`, {
+    method: "PATCH",
+    body: JSON.stringify({ showInHero }),
+  });
+
 export const deleteProduct = (id: string): Promise<{ success: boolean }> => {
   return apiRequest(`/admin/products/${id}`, { method: "DELETE" });
 };
@@ -236,6 +252,13 @@ export const updateCategory = (
   });
 };
 
+// Only flips the home-hero flag; nothing else on the category changes.
+export const setCategoryHero = (id: string, showInHero: boolean): Promise<Category> =>
+  apiRequest(`/admin/categories/${id}/hero`, {
+    method: "PATCH",
+    body: JSON.stringify({ showInHero }),
+  });
+
 export const deleteCategory = (id: string): Promise<{ success: boolean }> => {
   return apiRequest(`/admin/categories/${id}`, { method: "DELETE" });
 };
@@ -258,19 +281,25 @@ export const getOrders = async (params: {
     query.set("order", params.sortOrder === "ascending" ? "asc" : "desc");
 
   const data = await apiRequest(`/admin/orders?${query.toString()}`);
+  // Paged response is { orders, totalCount }; older backend returned a plain array.
+  const rawOrders: any[] = Array.isArray(data) ? data : data.orders || [];
 
-  const mappedOrders = data.map((o: any) => ({
+  const mappedOrders = rawOrders.map((o: any) => ({
     _id: o._id,
+    orderNumber: o.orderNumber,
     date: o.placedAt,
     status: o.orderStatus,
     isPreorder: o.isPreorder,
     items: (o.orderItems || []).map((item: any, index: number) => ({
       productId: item.productId?._id || item.productId || `unknown-${index}`,
       productName: item.productId?.name || "Unknown/Deleted Product",
+      variantLabel: item.variantLabel || undefined,
       quantity: item.quantity,
       price: item.price
     })),
     totalAmount: o.totalAmount,
+    deliveryFee: Number(o.deliveryFee) || 0,
+    customerPhone: o.customerPhone || undefined,
     paymentMethod: o.paymentMethod,
     paymentStatus: o.paymentStatus,
     shippingAddress: {
@@ -281,7 +310,9 @@ export const getOrders = async (params: {
     customerName: o.customerName,
     customerEmail: o.customerEmail || "N/A",
   }));
-  return { orders: mappedOrders, totalCount: data.length };
+  const totalCount =
+    typeof data?.totalCount === "number" ? data.totalCount : mappedOrders.length;
+  return { orders: mappedOrders, totalCount };
 };
 
 export const updateOrderStatus = async (
@@ -300,6 +331,71 @@ export const updateOrderStatus = async (
     body: JSON.stringify(payload),
   });
   return data;
+};
+
+// --- SIZE SETS (Settings > Size sets; offered in the product form) ---
+export const getSizeSets = async (): Promise<SizeSet[]> => apiRequest("/settings/size-sets");
+
+export const saveSizeSets = async (sets: SizeSet[]): Promise<SizeSet[]> =>
+  apiRequest("/settings/size-sets", { method: "PUT", body: JSON.stringify({ sets }) });
+
+// --- REVIEWS ---
+export const getReviews = async (params: {
+  page: number;
+  limit: number;
+  search?: string;
+  productId?: string;
+  rating?: number | "";
+  status?: ReviewStatusFilter;
+  sort?: string;
+}): Promise<ReviewsApiResponse> => {
+  const qs = new URLSearchParams({ page: String(params.page), limit: String(params.limit) });
+  if (params.search) qs.set("q", params.search);
+  if (params.productId) qs.set("productId", params.productId);
+  if (params.rating) qs.set("rating", String(params.rating));
+  if (params.status) qs.set("status", params.status);
+  if (params.sort) qs.set("sort", params.sort);
+  const data = await apiRequest(`/admin/reviews?${qs.toString()}`);
+  return { reviews: data.reviews || [], totalCount: data.totalCount || 0 };
+};
+
+export const getReviewStats = async (): Promise<ReviewStats> => apiRequest("/admin/reviews/stats");
+
+export const updateReview = async (
+  id: string,
+  patch: Partial<Pick<Review, "name" | "comment" | "rating" | "isVerified" | "isPublished" | "isFeatured">>
+): Promise<Review> =>
+  apiRequest(`/admin/reviews/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+
+export const deleteReview = async (id: string): Promise<void> => {
+  await apiRequest(`/admin/reviews/${id}`, { method: "DELETE" });
+};
+
+// --- CUSTOMERS ---
+export const getCustomers = async (params: {
+  page: number;
+  limit: number;
+  search?: string;
+  status?: CustomerStatusFilter;
+  sort?: string;
+}): Promise<CustomersApiResponse> => {
+  const qs = new URLSearchParams({ page: String(params.page), limit: String(params.limit) });
+  if (params.search) qs.set("q", params.search);
+  if (params.status) qs.set("status", params.status);
+  if (params.sort) qs.set("sort", params.sort);
+  const data = await apiRequest(`/admin/customers?${qs.toString()}`);
+  return { customers: data.customers || [], totalCount: data.totalCount || 0 };
+};
+
+export const getCustomerStats = async (): Promise<CustomerStats> => apiRequest("/admin/customers/stats");
+
+export const getCustomer = async (id: string): Promise<CustomerDetail> => apiRequest(`/admin/customers/${id}`);
+
+export const setCustomerBlocked = async (id: string, isBlocked: boolean): Promise<Customer> =>
+  apiRequest(`/admin/customers/${id}`, { method: "PATCH", body: JSON.stringify({ isBlocked }) });
+
+export const deleteCustomer = async (id: string): Promise<void> => {
+  await apiRequest(`/admin/customers/${id}`, { method: "DELETE" });
 };
 
 // --- MOCK DATA ---

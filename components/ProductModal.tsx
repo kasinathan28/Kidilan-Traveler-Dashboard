@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, memo, useContext } from 'react';
-import { Product, Category } from '../types';
+import { uploadImage } from '../api/imageUpload';
+import { Product, Category, SizeSet } from '../types';
+import { getSizeSets, saveSizeSets } from '../api/mockApi';
 import { XIcon } from './icons';
+import ProductOptions, { OptionsState, optionsFromVariants, variantsFromOptions, optionsError, combinations } from './ProductOptions';
 import { AppContext } from '../contexts/AppContext';
 
 const useFocusTrap = (ref: React.RefObject<HTMLElement>, isOpen: boolean) => {
@@ -69,10 +72,14 @@ const InputField: React.FC<{
   value: string | number;
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
   error?: string;
-}> = ({ name, label, type = 'text', value, onChange, error }) => (
+  hint?: string; // a line under the label saying where the value shows
+  placeholder?: string;
+  maxLength?: number;
+}> = ({ name, label, type = 'text', value, onChange, error, hint, placeholder, maxLength }) => (
   <div>
     <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-    <input id={name} type={type} name={name} value={value} onChange={onChange} placeholder={`Enter ${label.toLowerCase()}`} min="0" step={type === 'number' ? 0.01 : undefined} className={`w-full p-3 border rounded-lg focus:ring-2 ${error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-[#2D7A79]'}`} aria-invalid={!!error} />
+    {hint && <p id={`${name}-hint`} className="text-xs text-gray-500 -mt-0.5 mb-1.5">{hint}</p>}
+    <input id={name} type={type} name={name} value={value} onChange={onChange} placeholder={placeholder || `Enter ${label.toLowerCase()}`} maxLength={maxLength} aria-describedby={hint ? `${name}-hint` : undefined} min="0" step={type === 'number' ? 0.01 : undefined} className={`w-full p-3 border rounded-lg focus:ring-2 ${error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-[#2D7A79]'}`} aria-invalid={!!error} />
     {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
   </div>
 );
@@ -107,6 +114,25 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
   const [newSpecKey, setNewSpecKey] = useState('');
   const [newSpecValue, setNewSpecValue] = useState('');
   const [specError, setSpecError] = useState<string | null>(null);
+  const [options, setOptions] = useState<OptionsState>(() => optionsFromVariants(product?.variants));
+  const [optionsErr, setOptionsErr] = useState<string | null>(null);
+  const hasOptions = combinations(options).length > 0;
+
+  // the admin's size sets (Settings > Size sets), fetched each time the form opens
+  const [sizeSets, setSizeSets] = useState<SizeSet[]>([]);
+  useEffect(() => {
+    if (!isOpen) return;
+    getSizeSets().then(setSizeSets).catch(() => setSizeSets([]));
+  }, [isOpen]);
+
+  // "Save these sizes as a set" from inside the form; optionally suggested for this product's category
+  const handleSaveSizeSet = async (name: string, sizes: string[], linkCategory: boolean) => {
+    const categoryIds = linkCategory && formData.category ? [formData.category] : [];
+    const next = [...sizeSets, { id: '', name, sizes, categoryIds }];
+    const saved = await saveSizeSets(next);
+    setSizeSets(saved);
+    showToast(`Size set "${name}" saved.`);
+  };
 
   // Load saved form data from localStorage if available
   useEffect(() => {
@@ -162,6 +188,8 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
   useEffect(() => {
     if (isOpen) {
       setFormData(getInitialState());
+      setOptions(optionsFromVariants(product?.variants));
+      setOptionsErr(null);
       setErrors({});
       setIsSubmitting(false);
     } else {
@@ -189,13 +217,13 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
     setImageUrlError(null); // Clear previous errors
 
     // Define size limits (in bytes)
-    const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB per file
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file (uploaded straight to R2)
     const MAX_TOTAL_SIZE = 10 * 1024 * 1024; // 10MB total
 
     // Check individual file sizes
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
-        const errorMsg = `File "${file.name}" is too large. Maximum size is 2MB per image.`;
+        const errorMsg = `File "${file.name}" is too large. Maximum size is 10MB per image.`;
         setImageUrlError(errorMsg);
         showToast(errorMsg);
         e.target.value = '';
@@ -204,7 +232,8 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
     }
 
     // Calculate total size including existing images (rough estimate based on base64)
-    const existingSize = formData.imageUrls.reduce((sum, url) => sum + url.length * 0.75, 0);
+    // only inline (base64) images count towards the request size; R2 URLs are tiny
+    const existingSize = formData.imageUrls.reduce((sum, url) => sum + (url.startsWith('data:') ? url.length * 0.75 : 0), 0);
     const newFilesSize = files.reduce((sum, file) => sum + file.size, 0);
 
     if (existingSize + newFilesSize > MAX_TOTAL_SIZE) {
@@ -221,16 +250,16 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
         return;
       }
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        if (!formData.imageUrls.includes(base64String)) {
-          setFormData(prev => ({ ...prev, imageUrls: [...prev.imageUrls, base64String] }));
-        } else {
-          setImageUrlError('This image has already been added.');
-        }
-      };
-      reader.readAsDataURL(file);
+      // Upload straight to R2 (falls back to an inline image if that is not available)
+      uploadImage(file, 'products')
+        .then((url) => {
+          setFormData(prev =>
+            prev.imageUrls.includes(url)
+              ? prev
+              : { ...prev, imageUrls: [...prev.imageUrls, url] }
+          );
+        })
+        .catch(() => setImageUrlError('Could not read the image. Please try again.'));
     });
     // Clear the input value so the same file can be selected again if needed
     e.target.value = '';
@@ -269,14 +298,16 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
     if (!formData.name.trim()) newErrors.name = 'Product name is required.';
     if (!formData.category) newErrors.category = 'Category is required.';
     if (!formData.price || isNaN(Number(formData.price)) || Number(formData.price) < 0) newErrors.price = 'Please enter a valid price.';
-    if (!formData.stock || isNaN(Number(formData.stock)) || !Number.isInteger(Number(formData.stock)) || Number(formData.stock) < 0) newErrors.stock = 'Please enter a valid stock amount.';
+    // with colours or sizes the stock is the options' total, entered per option below
+    if (!hasOptions && (!formData.stock || isNaN(Number(formData.stock)) || !Number.isInteger(Number(formData.stock)) || Number(formData.stock) < 0)) newErrors.stock = 'Please enter a valid stock amount.';
+    const optErr = hasOptions ? optionsError(options) : null;
+    setOptionsErr(optErr);
     if (formData.specifications.length === 0) newErrors.specifications = 'At least one specification is required.';
     if (!formData.description.trim()) newErrors.description = 'Product description is required.';
     if (!formData.subHeading.trim()) newErrors.subHeading = 'Product sub heading is required.';
 
     setErrors(newErrors);
-    console.log('Validation errors:', newErrors);
-    return Object.keys(newErrors).length === 0;
+    return Object.keys(newErrors).length === 0 && !optErr;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -293,7 +324,8 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
       name: formData.name,
       category: formData.category,
       price: Number(formData.price),
-      stock: Number(formData.stock),
+      stock: hasOptions ? variantsFromOptions(options).reduce((n, v) => n + v.stock, 0) : Number(formData.stock),
+      variants: variantsFromOptions(options),
       imageUrls: formData.imageUrls,
       specifications: formData.specifications,
       description: formData.description,
@@ -316,7 +348,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div ref={modalRef} className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
+      <div ref={modalRef} className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl relative max-h-[90vh] overflow-y-auto">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800" aria-label="Close modal">
           <XIcon className="w-6 h-6" />
         </button>
@@ -329,10 +361,12 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
             onChange={handleChange}
             error={errors.name}
           />
-          <TextareaField
+          <InputField
             name="subHeading"
-            label="Sub Heading"
-            rows={2}
+            label="Sub heading"
+            hint="One short line shown right under the product name on its page."
+            placeholder="e.g. Adjustable strap, curved peak"
+            maxLength={120}
             value={formData.subHeading}
             onChange={handleChange}
             error={errors.subHeading}
@@ -389,7 +423,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
           </div>
 
           <div>
-            <label htmlFor="imageUpload" className="block text-sm font-medium text-gray-700 mb-1">Product Images ( max size 2mb )</label>
+            <label htmlFor="imageUpload" className="block text-sm font-medium text-gray-700 mb-1">Product Images ( max size 10MB each )</label>
             <input
               id="imageUpload"
               type="file"
@@ -449,15 +483,36 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
               onChange={handleChange}
               error={errors.price}
             />
-            <InputField
-              name="stock"
-              label="Stock"
-              type="number"
-              value={formData.stock}
-              onChange={handleChange}
-              error={errors.stock}
-            />
+            {hasOptions ? (
+              <div>
+                <span className="block text-sm font-medium text-gray-700 mb-1">Stock</span>
+                <p className="w-full p-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+                  {variantsFromOptions(options).reduce((n, v) => n + v.stock, 0)} in total, set per option below
+                </p>
+              </div>
+            ) : (
+              <InputField
+                name="stock"
+                label="Stock"
+                type="number"
+                value={formData.stock}
+                onChange={handleChange}
+                error={errors.stock}
+              />
+            )}
           </div>
+
+          <ProductOptions
+            value={options}
+            onChange={(o) => { setOptions(o); setOptionsErr(null); }}
+            imageUrls={formData.imageUrls}
+            categoryId={formData.category}
+            categoryName={categories.find((c) => c._id === formData.category)?.name}
+            sizeSets={sizeSets}
+            onSaveSizeSet={handleSaveSizeSet}
+            basePrice={formData.price}
+            error={optionsErr}
+          />
 
           <div className="flex justify-end space-x-4 pt-4">
             <button type="button" onClick={onClose} disabled={isSubmitting} className="px-6 py-2 rounded-lg text-gray-700 bg-gray-200 hover:bg-gray-300 disabled:opacity-50">Cancel</button>

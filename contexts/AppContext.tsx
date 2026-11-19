@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+﻿import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { AppContextType, Page, User } from '../types';
 import { login as apiLogin } from '../api/mockApi';
 
@@ -8,7 +8,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activePage, _setActivePage] = useState<Page>(() => {
     // Get initial page from URL hash or default to 'products'
     const hash = window.location.hash.replace('#', '');
-    const validPages: Page[] = ['dashboard', 'products', 'categories', 'orders', 'reports', 'offers', 'websiteContent', 'settings'];
+    const validPages: Page[] = ['dashboard', 'products', 'categories', 'orders', 'reviews', 'reports', 'offers', 'websiteContent', 'settings'];
     return validPages.includes(hash as Page) ? (hash as Page) : 'products';
   });
   const [searchQuery, setSearchQuery] = useState('');
@@ -80,7 +80,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      const validPages: Page[] = ['dashboard', 'products', 'categories', 'orders', 'reports', 'offers', 'websiteContent', 'settings'];
+      const validPages: Page[] = ['dashboard', 'products', 'categories', 'orders', 'reviews', 'reports', 'offers', 'websiteContent', 'settings'];
       if (validPages.includes(hash as Page) && hash !== activePage) {
         _setActivePage(hash as Page);
       }

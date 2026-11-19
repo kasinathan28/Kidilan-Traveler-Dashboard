@@ -12,10 +12,10 @@ import Pagination from "./Pagination";
 import SortableTableHeader from "./SortableTableHeader";
 import LoadingSpinner from "./LoadingSpinner";
 import { useDebounce } from "../hooks/useDebounce";
+import { usePageSize } from "../hooks/usePageSize";
 import { ChevronDownIcon } from "./icons";
 import ConfirmationModal from "./ConfirmationModal";
 
-const ORDERS_PER_PAGE = 8;
 const ALL_STATUSES: OrderStatus[] = [
   "pending",
   "processing",
@@ -35,6 +35,23 @@ const statusBadgeStyles: Record<string, string> = {
   cancelled: "bg-red-100 text-red-800 border-red-200 focus:ring-red-500",
 };
 
+// ₹1,234.50 (Indian grouping)
+const inr = (n: number) =>
+  "₹" + (Number(n) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// 18 Nov 2026
+const shortDate = (d: string) =>
+  d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
+const shortTime = (d: string) =>
+  d ? new Date(d).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) : "";
+// The number the customer sees on their receipt; old orders without one fall back to the internal ID.
+// +919876543210 -> +91 98765 43210 (other numbers are shown as entered)
+const phoneLabel = (p: string) => {
+  const m = /^\+91(\d{5})(\d{5})$/.exec(p.replace(/[\s-]/g, ""));
+  return m ? `+91 ${m[1]} ${m[2]}` : p;
+};
+const orderLabel =(o: Pick<Order, "_id" | "orderNumber">) =>
+  o.orderNumber || `#${o._id.slice(-6).toUpperCase()}`;
+
 const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,6 +59,7 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
 
   const [totalOrders, setTotalOrders] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize("orders");
   const [sortConfig, setSortConfig] = useState<SortConfig<Order>>({
     key: "date",
     direction: "descending",
@@ -59,47 +77,51 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
   const { showToast } = useContext(AppContext);
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
-  const prevFiltersRef = useRef({
-    search: debouncedSearchQuery,
-    sort: sortConfig,
-  });
+  // Search, sort and rows per page run on the server; any change sends the user back to page 1.
+  const filterKey = `${debouncedSearchQuery}|${String(sortConfig.key)}|${sortConfig.direction}|${pageSize}`;
+  const lastFilterKey = useRef(filterKey);
+  // Only the newest request may update state (page clicks can overlap).
+  const requestId = useRef(0);
 
   const fetchAndSetOrders = useCallback(
     async (pageToFetch: number) => {
+      const id = ++requestId.current;
       setIsLoading(true);
       setError(null);
       try {
         const data = await getOrders({
           page: pageToFetch,
-          limit: ORDERS_PER_PAGE,
+          limit: pageSize,
+          search: debouncedSearchQuery.trim() || undefined,
           sortBy: sortConfig.key,
           sortOrder: sortConfig.direction,
         });
+        if (id !== requestId.current) return;
         setOrders(data.orders);
         setTotalOrders(data.totalCount);
+        const lastPage = Math.max(Math.ceil(data.totalCount / pageSize), 1);
+        if (pageToFetch > lastPage) setCurrentPage(lastPage);
       } catch (err) {
+        if (id !== requestId.current) return;
         setError("Failed to fetch orders. Please try again later.");
         showToast("Failed to fetch orders");
       } finally {
-        setIsLoading(false);
+        if (id === requestId.current) setIsLoading(false);
       }
     },
-    [sortConfig, showToast],
+    [debouncedSearchQuery, sortConfig, showToast, pageSize],
   );
 
   useEffect(() => {
-    const filtersChanged =
-      prevFiltersRef.current.sort.key !== sortConfig.key ||
-      prevFiltersRef.current.sort.direction !== sortConfig.direction;
-
-    const pageToFetch = filtersChanged ? 1 : currentPage;
-    if (filtersChanged && currentPage !== 1) {
-      setCurrentPage(1);
+    if (lastFilterKey.current !== filterKey) {
+      lastFilterKey.current = filterKey;
+      if (currentPage !== 1) {
+        setCurrentPage(1); // re-runs this effect with page 1
+        return;
+      }
     }
-
-    fetchAndSetOrders(pageToFetch);
-    prevFiltersRef.current = { search: "", sort: sortConfig };
-  }, [currentPage, sortConfig, fetchAndSetOrders]);
+    fetchAndSetOrders(currentPage);
+  }, [currentPage, filterKey, fetchAndSetOrders]);
 
   const handleStatusChange = async (
     orderId: string,
@@ -113,7 +135,8 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
       setUpdatingStatus(orderId);
       try {
         await updateOrderStatus(orderId, newStatus);
-        showToast(`Order #${orderId.substring(0, 6)} status updated.`);
+        const o = orders.find((x) => x._id === orderId);
+        showToast(`Order ${o ? orderLabel(o) : ""} status updated.`);
         setOrders((prev) =>
           prev.map((o) =>
             o._id === orderId ? { ...o, status: newStatus } : o,
@@ -150,9 +173,8 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     setShowAwbModal(false);
     try {
       await updateOrderStatus(currentOrderId, newStatusForAwb, awbId.trim());
-      showToast(
-        `Order #${currentOrderId.substring(0, 6)} status updated and AWB ID added.`,
-      );
+      const o = orders.find((x) => x._id === currentOrderId);
+      showToast(`Order ${o ? orderLabel(o) : ""} status updated and AWB ID added.`);
       setOrders((prev) =>
         prev.map((o) =>
           o._id === currentOrderId ? { ...o, status: newStatusForAwb } : o,
@@ -201,17 +223,7 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
         </tr>
       );
     }
-    const filteredOrders = orders.filter(
-      (order) =>
-        order._id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.shippingAddress.name
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase()) ||
-        (order.shippingAddress.email &&
-          order.shippingAddress.email
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())),
-    );
+    const filteredOrders = orders;
 
     if (filteredOrders.length === 0) {
       return (
@@ -229,9 +241,9 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleToggleExpand(order._id)}
-                className="flex items-center text-[#2D7A79] hover:underline font-mono text-sm group"
+                className="flex items-center whitespace-nowrap text-[#2D7A79] hover:underline font-mono text-sm group"
               >
-                #{order._id.slice(-6).toUpperCase()}
+                {orderLabel(order)}
                 <ChevronDownIcon
                   className={`w-4 h-4 ml-2 transition-transform transform group-hover:text-gray-700 ${expandedOrderId === order._id ? "rotate-180" : ""}`}
                 />
@@ -250,12 +262,18 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
             <div className="text-xs text-gray-500">
               {order.shippingAddress.email}
             </div>
+            {order.customerPhone && (
+              <a href={`tel:${order.customerPhone}`} className="text-xs text-gray-500 hover:text-[#2D7A79] tabular-nums">
+                {phoneLabel(order.customerPhone)}
+              </a>
+            )}
           </td>
-          <td data-label="Date" className="px-6 py-4">
-            {new Date(order.date).toLocaleDateString()}
+          <td data-label="Date" className="px-6 py-4 whitespace-nowrap">
+            <div>{shortDate(order.date)}</div>
+            <div className="text-xs text-gray-400">{shortTime(order.date)}</div>
           </td>
-          <td data-label="Total" className="px-6 py-4 font-medium">
-            ₹{order.totalAmount.toFixed(2)}
+          <td data-label="Total" className="px-6 py-4 font-medium tabular-nums whitespace-nowrap">
+            {inr(order.totalAmount)}
           </td>
           <td data-label="Status" className="px-6 py-4">
             <div className="flex items-center">
@@ -298,6 +316,14 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
                   </div>
                   <div>{order.shippingAddress.postalCode}</div>
                   <div>{order.shippingAddress.country}</div>
+                  {order.customerPhone && (
+                    <div>
+                      Phone:{" "}
+                      <a href={`tel:${order.customerPhone}`} className="text-[#2D7A79] hover:underline tabular-nums">
+                        {phoneLabel(order.customerPhone)}
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 {/* Order Items */}
@@ -313,19 +339,28 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
                         <span className="font-semibold text-gray-800">
                           {item.productName || `Product ID: ${item.productId}`}
                         </span>
+                        {item.variantLabel && (
+                          <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                            {item.variantLabel}
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-left sm:text-right mt-2 sm:mt-0">
                         <div className="text-gray-600">
                           Qty: {item.quantity}
                         </div>
-                        <div className="text-gray-800 font-medium">
-                          ${item.price.toFixed(2)} each
+                        <div className="text-gray-800 font-medium tabular-nums">
+                          {inr(item.price)} each
                         </div>
                       </div>
                     </li>
                   ))}
                 </ul>
+                <div className="mt-3 space-y-1 text-sm text-gray-600 sm:text-right tabular-nums">
+                  <div>Delivery: {order.deliveryFee ? inr(order.deliveryFee) : "Free"}</div>
+                  <div className="font-semibold text-gray-800">Total: {inr(order.totalAmount)}</div>
+                </div>
               </div>
             </td>
           </tr>
@@ -344,8 +379,8 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
           <thead className="text-xs text-gray-700 uppercase bg-gray-50">
             <tr>
               <SortableTableHeader<Order>
-                label="Order ID"
-                sortKey="_id"
+                label="Order No."
+                sortKey="orderNumber"
                 sortConfig={sortConfig}
                 onSort={handleSort}
               />
@@ -386,7 +421,8 @@ const OrderTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
         <Pagination
           currentPage={currentPage}
           totalCount={totalOrders}
-          pageSize={ORDERS_PER_PAGE}
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
           onPageChange={(page) => setCurrentPage(page)}
         />
       )}

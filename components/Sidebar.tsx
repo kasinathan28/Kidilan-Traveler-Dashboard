@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { DashboardIcon, ProductsIcon, ReportsIcon, SettingsIcon, LogoutIcon, MenuIcon, XIcon, OrderIcon, Squares2X2Icon, TagIcon, GlobeAltIcon } from './icons';
+import { DashboardIcon, ProductsIcon, ReportsIcon, SettingsIcon, LogoutIcon, MenuIcon, XIcon, OrderIcon, Squares2X2Icon, TagIcon, GlobeAltIcon, ChatBubbleIcon, UserGroupIcon } from './icons';
 import { AppContext } from '../contexts/AppContext';
 import { Page } from '../types';
 
@@ -69,6 +69,8 @@ const Sidebar: React.FC = () => {
           <NavLink icon={<ProductsIcon className="h-6 w-6" />} label="Products" active={activePage === 'products'} onClick={() => handleNavigate('products')} />
           <NavLink icon={<Squares2X2Icon className="h-6 w-6" />} label="Categories" active={activePage === 'categories'} onClick={() => handleNavigate('categories')} />
           <NavLink icon={<OrderIcon className="h-6 w-6" />} label="Orders" active={activePage === 'orders'} onClick={() => handleNavigate('orders')} />
+          <NavLink icon={<ChatBubbleIcon className="h-6 w-6" />} label="Reviews" active={activePage === 'reviews'} onClick={() => handleNavigate('reviews')} />
+          <NavLink icon={<UserGroupIcon className="h-6 w-6" />} label="Customers" active={activePage === 'customers'} onClick={() => handleNavigate('customers')} />
           {/* <NavLink icon={<ReportsIcon className="h-6 w-6" />} label="Reports" active={activePage === 'reports'} onClick={() => handleNavigate('reports')} /> */}
           <NavLink icon={<GlobeAltIcon className="h-6 w-6" />} label="Website" active={activePage === 'websiteContent'} onClick={() => handleNavigate('websiteContent')} />
           <NavLink icon={<SettingsIcon className="h-6 w-6" />} label="Settings" active={activePage === 'settings'} onClick={() => handleNavigate('settings')} />

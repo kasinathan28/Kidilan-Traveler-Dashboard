@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { uploadImage } from '../api/imageUpload';
 import { Category } from '../types';
 import { XIcon } from './icons';
 
@@ -90,12 +91,13 @@ const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, onSave, 
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setFormData(prev => ({ ...prev, imageUrl: reader.result as string }));
-      setErrors(prev => ({ ...prev, imageUrl: undefined })); // Clear error on successful read
-    };
-    reader.readAsDataURL(file);
+    // Upload straight to R2 (falls back to an inline image if that is not available)
+    uploadImage(file, 'categories')
+      .then((url) => {
+        setFormData(prev => ({ ...prev, imageUrl: url }));
+        setErrors(prev => ({ ...prev, imageUrl: undefined })); // Clear error on success
+      })
+      .catch(() => setErrors(prev => ({ ...prev, imageUrl: 'Could not read the image. Please try again.' })));
   };
 
   const validate = () => {

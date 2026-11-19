@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { AppContext } from '../contexts/AppContext';
 import { getOfferCountdown, updateOfferCountdown, changePassword } from '../api/mockApi';
 import LoadingSpinner from '../components/LoadingSpinner';
+import SizeSetsSection from '../components/SizeSetsSection';
 
 const SettingsPage: React.FC = () => {
   const { showToast } = useContext(AppContext);
@@ -203,6 +204,9 @@ const SettingsPage: React.FC = () => {
           </div>
         </form>
       </div>
+
+      {/* Size sets offered in the product form's "Colours and sizes" */}
+      <SizeSetsSection showToast={showToast} />
 
       {/* Change Password Card */}
       <PasswordSection showToast={showToast} />

@@ -10,6 +10,8 @@ interface ProductRowProps {
   handleEditClick: (product: Product) => void;
   handleOfferClick: (product: Product) => void;
   setProductToDelete: (product: Product) => void;
+  onToggleHero: (product: Product) => void;
+  heroBusy?: boolean;
 }
 
 const ProductRow: React.FC<ProductRowProps> = ({
@@ -18,7 +20,9 @@ const ProductRow: React.FC<ProductRowProps> = ({
   setOpenMenuId,
   handleEditClick,
   handleOfferClick,
-  setProductToDelete
+  setProductToDelete,
+  onToggleHero,
+  heroBusy,
 }) => {
   const [openUpwards, setOpenUpwards] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -56,7 +60,30 @@ const ProductRow: React.FC<ProductRowProps> = ({
           <span>₹{product.price.toFixed(2)}</span>
         )}
       </td>
-      <td data-label="Stock" className="px-6 py-4">{product.stock}</td>
+      <td data-label="Stock" className="px-6 py-4">
+        {product.stock}
+        {product.variants && product.variants.length > 0 && (() => {
+          const colours = new Set(product.variants.map((v) => v.attributes?.color).filter(Boolean)).size;
+          const sizes = new Set(product.variants.map((v) => v.attributes?.size).filter(Boolean)).size;
+          return (
+            <span className="block text-xs text-gray-500">
+              {[colours && `${colours} colour${colours > 1 ? 's' : ''}`, sizes && `${sizes} size${sizes > 1 ? 's' : ''}`].filter(Boolean).join(', ')}
+            </span>
+          );
+        })()}
+      </td>
+      <td data-label="Home hero" className="px-6 py-4 text-center">
+        <label className="inline-flex items-center justify-center cursor-pointer" title="Show this product in the home page hero carousel">
+          <input
+            type="checkbox"
+            checked={!!product.showInHero}
+            disabled={heroBusy}
+            onChange={() => onToggleHero(product)}
+            aria-label={`Show ${product.name} in the home page hero`}
+            className="h-5 w-5 rounded accent-[#2D7A79] cursor-pointer disabled:cursor-wait"
+          />
+        </label>
+      </td>
       <td data-label="Actions" className="px-6 py-4 text-right relative">
         <div className="flex justify-end">
           <button

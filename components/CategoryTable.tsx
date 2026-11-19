@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { Category } from '../types';
-import { getCategories, addCategory, updateCategory, deleteCategory } from '../api/mockApi';
+import { getCategories, addCategory, updateCategory, deleteCategory, setCategoryHero } from '../api/mockApi';
 import LoadingSpinner from './LoadingSpinner';
 import { EditIcon, DeleteIcon, Squares2X2Icon } from './icons';
 import { AppContext } from '../contexts/AppContext';
@@ -72,6 +72,24 @@ const CategoryTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
         }
     };
 
+    // Tick = a card for this category in the storefront home hero. Optimistic; put back on failure.
+    const [heroBusyId, setHeroBusyId] = useState<string | null>(null);
+    const heroCount = categories.filter((c) => c.showInHero).length;
+    const handleToggleHero = async (category: Category) => {
+        const next = !category.showInHero;
+        setHeroBusyId(category._id);
+        setCategories((prev) => prev.map((c) => (c._id === category._id ? { ...c, showInHero: next } : c)));
+        try {
+            await setCategoryHero(category._id, next);
+            showToast(next ? `"${category.name}" will show in the home hero.` : `"${category.name}" removed from the home hero.`);
+        } catch (error: any) {
+            setCategories((prev) => prev.map((c) => (c._id === category._id ? { ...c, showInHero: !next } : c)));
+            showToast(error?.message || 'Could not update the home hero.');
+        } finally {
+            setHeroBusyId(null);
+        }
+    };
+
     const handleDelete = async () => {
         if (!categoryToDelete) return;
 
@@ -119,13 +137,26 @@ const CategoryTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
                                 <p className="text-sm font-medium text-gray-500 mt-1">{category.productCount} Product{category.productCount !== 1 ? 's' : ''}</p>
                              )}
                             <p className="text-sm text-gray-600 mt-2 flex-grow">{category.description}</p>
-                            <div className="flex justify-end space-x-2 mt-4">
+                            <div className="flex items-center justify-between gap-2 mt-4">
+                                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer select-none" title="Show this category as a card in the home page hero">
+                                    <input
+                                        type="checkbox"
+                                        checked={!!category.showInHero}
+                                        disabled={heroBusyId === category._id}
+                                        onChange={() => handleToggleHero(category)}
+                                        aria-label={`Show ${category.name} in the home page hero`}
+                                        className="h-4 w-4 accent-[#2D7A79] cursor-pointer disabled:cursor-wait"
+                                    />
+                                    Show in home hero
+                                </label>
+                            <div className="flex space-x-2">
                                 <button onClick={() => handleEditClick(category)} className="p-2 text-blue-600 hover:text-blue-800 rounded-full hover:bg-blue-100 transition-colors" aria-label={`Edit ${category.name}`}>
                                     <EditIcon className="w-5 h-5" />
                                 </button>
                                 <button onClick={() => handleDeleteClick(category)} className="p-2 text-red-600 hover:text-red-800 rounded-full hover:bg-red-100 transition-colors" aria-label={`Delete ${category.name}`}>
                                     <DeleteIcon className="w-5 h-5" />
                                 </button>
+                            </div>
                             </div>
                         </div>
                     </div>
@@ -137,9 +168,14 @@ const CategoryTable: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
     return (
         <>
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-gray-800">Manage Categories</h3>
-                    <button onClick={handleAddClick} className="px-5 py-2 bg-[#2D7A79] text-white rounded-lg font-semibold hover:bg-opacity-90 shadow-sm transition-all flex items-center gap-2">
+                <div className="flex justify-between items-start gap-4 mb-6">
+                    <div className="min-w-0">
+                        <h3 className="text-xl font-bold text-gray-800">Manage Categories</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                            Home hero cards: {heroCount} ticked. Ticked ones show first (up to 4); the largest categories fill the rest.
+                        </p>
+                    </div>
+                    <button onClick={handleAddClick} className="shrink-0 whitespace-nowrap px-5 py-2 bg-[#2D7A79] text-white rounded-lg font-semibold hover:bg-opacity-90 shadow-sm transition-all flex items-center gap-2">
                         <Squares2X2Icon className="w-5 h-5" />
                         Add Category
                     </button>

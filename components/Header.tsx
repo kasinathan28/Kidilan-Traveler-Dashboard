@@ -22,6 +22,10 @@ const Header: React.FC<HeaderProps> = ({ pageTitle, pageDescription }) => {
         return 'Search orders...';
       case 'categories':
         return 'Search categories...';
+      case 'reviews':
+        return 'Search reviews...';
+      case 'customers':
+        return 'Search name, email, phone...';
       default:
         return 'Search products...';
     }

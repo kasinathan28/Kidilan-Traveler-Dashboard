@@ -6,6 +6,8 @@ import ProductsPage from './pages/ProductsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import OrdersPage from './pages/OrdersPage';
 import ReportsPage from './pages/ReportsPage';
+import ReviewsPage from './pages/ReviewsPage';
+import CustomersPage from './pages/CustomersPage';
 import LoginPage from './pages/LoginPage';
 import WebsiteContentPage from './pages/WebsiteContentPage';
 import SettingsPage from './pages/SettingsPage';
@@ -34,6 +36,14 @@ const App: React.FC = () => {
       title: 'Customer Orders',
       description: 'Track, manage, and fulfill customer orders.',
     },
+    reviews: {
+      title: 'Reviews',
+      description: 'Read, hide, edit and feature customer reviews for every product.',
+    },
+    customers: {
+      title: 'Customers',
+      description: 'People with a shop account: their orders and reviews, and blocking or deleting an account.',
+    },
     reports: {
       title: 'Reports',
       description: 'View detailed analytics and reports on your sales and products.',
@@ -60,6 +70,10 @@ const App: React.FC = () => {
         return <CategoriesPage />;
       case 'orders':
         return <OrdersPage />;
+      case 'reviews':
+        return <ReviewsPage />;
+      case 'customers':
+        return <CustomersPage />;
       case 'reports':
         return <ReportsPage />;
       case 'websiteContent':
